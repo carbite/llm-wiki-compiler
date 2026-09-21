@@ -52,6 +52,7 @@ import {
   type ProviderOption,
 } from "./cli/provider-option.js";
 import { loadCliEnvironment } from "./cli/environment.js";
+import { configureChineseHelp } from "./cli/help-zh.js";
 
 loadCliEnvironment();
 
@@ -455,4 +456,5 @@ function requireAvailableProvider(ensureAvailable: () => void): void {
   }
 }
 
+configureChineseHelp(program);
 program.parse();

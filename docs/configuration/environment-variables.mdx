@@ -337,6 +337,13 @@ place because extraction depends on structured arguments, not optional prose.
 
 ## Output
 
+The main `llmwiki --help` page and common direct-command help descriptions are
+displayed in Chinese. Command names and option spellings stay unchanged;
+advanced nested commands and untranslated options keep their original English
+descriptions. Set `LLMWIKI_HELP_LANG=en` for the original English help, for
+example `LLMWIKI_HELP_LANG=en llmwiki --help`. This changes help presentation
+only, does not write files, and does not change generated wiki or answer language.
+
 | Variable | Default | Description |
 |---|---|---|
 | `LLMWIKI_MAX_TOKENS` | `4096` | Default completion-token limit for shared LLM calls, including concept extraction and page generation. Use a positive safe integer in decimal digits; blank means the default. Internal calls with their own fixed limit are unaffected. Agent-backed providers do not honor this limit. This is separate from the input character budget below |

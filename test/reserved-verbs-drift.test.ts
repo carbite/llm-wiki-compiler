@@ -14,17 +14,18 @@ import { describe, it, expect } from "vitest";
 import { runCLI } from "./fixtures/run-cli.js";
 import { RESERVED_CORE_VERBS } from "../src/profile/reserved-verbs.js";
 
-/** Commander prints two-space-indented command lines under a `Commands:` header. */
+/** Commander prints two-space-indented command lines under its localized command header. */
 const COMMAND_LINE = /^ {2}(\S+)/;
 
 /**
  * Parse the top-level verbs from `--help` output: every two-space-indented line
- * in the `Commands:` section contributes its first token. Deeper-indented
+ * in the localized commands section contributes its first token. Deeper-indented
  * continuation lines and the synthetic `help` verb are excluded.
  */
 function parseTopLevelVerbs(helpOutput: string): string[] {
   const lines = helpOutput.split("\n");
-  const start = lines.findIndex((line) => line.trim() === "Commands:");
+  const start = lines.findIndex((line) => /^(Commands:|命令：)$/.test(line.trim()));
+  if (start < 0) throw new Error("Missing commands section in CLI help");
   const verbs: string[] = [];
   for (const line of lines.slice(start + 1)) {
     const match = COMMAND_LINE.exec(line);

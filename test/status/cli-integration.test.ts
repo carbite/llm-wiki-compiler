@@ -36,7 +36,7 @@ describe("llmwiki status (CLI)", () => {
     const result = await runCLI(["status", "--help"], cwd);
     expectCLIExit(result, 0);
     expect(result.stdout).toContain("--json");
-    expect(result.stdout).toContain("state health");
+    expect(result.stdout).toContain("状态健康情况");
   });
 
   it("runs credential-free on an empty project and reports missing state", async () => {

@@ -27,7 +27,7 @@ describe("eval CLI subprocess smoke test", () => {
   it("eval --help lists the cache/report/history/judgements subcommands", async () => {
     const result = await runCLI(["eval", "--help"], process.cwd());
     expectCLIExit(result, 0);
-    expect(result.stdout).toContain("Evaluate wiki quality");
+    expect(result.stdout).toContain("评估 Wiki 质量");
     expect(result.stdout).toContain("cache");
     expect(result.stdout).toContain("report");
     expect(result.stdout).toContain("history");
