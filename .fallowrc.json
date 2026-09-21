@@ -2,6 +2,7 @@
   "$schema": "https://fallow.tools/schema.json",
   "entry": [
     "src/viewer/assets/viewer.js",
+    "src/viewer/assets/viewer-zh.js",
     "scripts/copy-viewer-assets.mjs",
     "src/viewer/assets/viewer-theme-boot.js",
     "test/fixtures/mock-embeddings.mjs",

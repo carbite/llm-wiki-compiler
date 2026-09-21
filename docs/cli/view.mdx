@@ -6,6 +6,8 @@ description: "llmwiki view starts a private local web server for browsing, searc
 
 After compiling your wiki, `llmwiki view` gives you a private local web interface for browsing, searching, and inspecting what was generated. The viewer renders your compiled Markdown pages with their frontmatter metadata, shows citation and provenance chips for each claim, provides a full-text search across your compiled pages, and includes a force-directed graph at `#/graph` for exploring how concepts link to each other. The viewer runs locally. Opening a DOI, arXiv or URL locator navigates to that external service; it does not make the viewer acquire or store the original publication.
 
+The bundled viewer displays its navigation, controls, status labels, and explanatory copy in Simplified Chinese when the browser language starts with `zh` or the URL includes `?lang=zh-CN`. Other browser languages keep the existing English interface. Localization leaves page titles, authored page content, source excerpts, profile identifiers, routes, file names, and CLI commands unchanged.
+
 ## Starting the viewer
 
 ```bash
