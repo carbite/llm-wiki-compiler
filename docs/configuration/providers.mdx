@@ -1,7 +1,7 @@
 ---
 title: "LLM Provider Setup and Configuration Guide for llmwiki"
 sidebarTitle: "Providers"
-description: "Configure llmwiki to use Anthropic, OpenAI-compatible endpoints, Ollama, GitHub Copilot, Atlas Cloud, Claude Agent SDK, or OpenAI Codex CLI."
+description: "Configure llmwiki to use Anthropic, OpenAI-compatible endpoints, Ollama, GitHub Copilot, Atlas Cloud, Claude Agent SDK, OpenAI Codex CLI, or TraeCode CLI."
 ---
 
 llmwiki is provider-portable. Whether you have an Anthropic API key, a GitHub Copilot subscription, a locally-running Ollama server, or just a Claude Code login, you can point llmwiki at the right backend with a handful of environment variables - no config files required for most setups. Choose the provider that matches your existing credentials and infrastructure.
@@ -172,6 +172,56 @@ Codex has no embeddings interface. `codex-agent` therefore requires an explicit
 silently falls back to lexical-only behavior. Use `ollama` for a fully keyless
 setup, or configure `openai`, `anthropic`, or `claude-agent` embeddings with
 that backend's existing settings.
+
+  </Tab>
+  <Tab title="TraeCode CLI">
+
+The `trae` provider delegates every completion and structured extraction request
+to the locally installed TraeCode CLI, which exposes the same non-interactive
+`exec` boundary as Codex. Authentication belongs entirely to TraeCode CLI, so an
+existing `trae-cli login` is used; llmwiki does not require, read, copy, store,
+or log an API key for chat.
+
+**Setup**
+
+```bash
+trae-cli login
+
+export LLMWIKI_PROVIDER=trae
+export LLMWIKI_MODEL=Seed-Evolving
+export LLMWIKI_EMBEDDING_PROVIDER=ollama
+export OLLAMA_HOST=http://localhost:11434/v1
+llmwiki compile
+
+# Equivalent one-run selection:
+llmwiki compile --provider trae
+```
+
+The `--provider` override is available on `compile`, `refresh`, `query`,
+`watch`, `rules extract`, `eval`, and `quickstart`. If TraeCode CLI is missing or
+its login is unusable, llmwiki exits nonzero with a TraeCode-specific
+remediation; there is no fallback to an API-key provider.
+
+llmwiki's minimum verified compatible TraeCode CLI version is **0.201.4**. Older
+versions may not support the secure non-interactive flags this provider
+requires. Verify with `trae-cli --version`.
+
+<Warning>
+  Like `codex-agent`, when `trae` is selected by `--provider` or a
+  shell-exported `LLMWIKI_PROVIDER`, llmwiki deliberately does not open the
+  project `.env` file because it may contain API keys. Export
+  `LLMWIKI_EMBEDDING_PROVIDER`, `LLMWIKI_MODEL`, and any embedding-backend
+  settings in the shell for that run.
+</Warning>
+
+The execution model, option semantics, and fail-closed embeddings behavior are
+identical to the OpenAI Codex CLI provider above: ephemeral read-only `exec`
+child in a throwaway directory, bounded timeout and output caps, `LLMWIKI_MODEL`
+passed to `--model` (Seed-Evolving in the example), no `maxTokens` control, and
+`--output-schema`-validated structured output. Because TraeCode CLI has no
+embeddings interface, `trae` requires an explicit `LLMWIKI_EMBEDDING_PROVIDER`
+(use `ollama` for a fully keyless setup) and never silently degrades to
+lexical-only retrieval.
 
   </Tab>
   <Tab title="OpenAI-Compatible">

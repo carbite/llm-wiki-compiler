@@ -106,6 +106,39 @@ afterEach(async () => {
 });
 
 describe("CodexAgentProvider process boundary", () => {
+  it("adapts the real extraction schema at the CLI boundary without mutating it", async () => {
+    const { CONCEPT_EXTRACTION_TOOL } = await import("../src/compiler/prompts.js");
+    const original = structuredClone(CONCEPT_EXTRACTION_TOOL.input_schema);
+    const fake = await useFake({ toolOutput: { concepts: [] } });
+    await new CodexAgentProvider(undefined, { timeoutMs: 2_000 })
+      .toolCall("system", [{ role: "user", content: "extract" }], [CONCEPT_EXTRACTION_TOOL], 100);
+    const schema = (await fake.calls())[0].schema as typeof original;
+    expect(schema).toMatchObject({ additionalProperties: false, required: ["concepts"] });
+    const concept = schema.properties.concepts.items;
+    expect(concept).toMatchObject({ additionalProperties: false });
+    expect(concept.required).toEqual(Object.keys(concept.properties));
+    expect(concept.properties.contradicted_by.items).toMatchObject({
+      additionalProperties: false, required: ["slug", "reason"],
+    });
+    expect(CONCEPT_EXTRACTION_TOOL.input_schema).toEqual(original);
+  });
+
+  it("preserves proxy routing without forwarding unrelated parent credentials", async () => {
+    const fake = await useFake();
+    const routing = {
+      HTTP_PROXY: "http://proxy.example:8118", HTTPS_PROXY: "http://proxy.example:8118",
+      ALL_PROXY: "socks5://proxy.example:1080", NO_PROXY: "localhost,127.0.0.1",
+      http_proxy: "http://proxy.example:8118", https_proxy: "http://proxy.example:8118",
+      all_proxy: "socks5://proxy.example:1080", no_proxy: "localhost,127.0.0.1",
+    };
+    Object.assign(process.env, routing, { OPENAI_API_KEY: "must-not-forward" });
+    await new CodexAgentProvider(undefined, { timeoutMs: 2_000 })
+      .complete("system", [{ role: "user", content: "hello" }], 1);
+    const [call] = await fake.calls();
+    expect(call.env).toMatchObject(routing);
+    expect(call.env.OPENAI_API_KEY).toBeUndefined();
+  });
+
   it("runs an ephemeral, read-only, non-interactive exec in a cleaned throwaway cwd", async () => {
     const fake = await useFake({ textOutput: "compiled page" });
     process.env.OPENAI_API_KEY = "sk-parent-must-not-leak";
@@ -134,9 +167,11 @@ describe("CodexAgentProvider process boundary", () => {
       expect.arrayContaining(["HOME", "NO_COLOR", "PATH"]),
     );
     const allowed = new Set([
-      "PATH", "HOME", "USERPROFILE", "CODEX_HOME", "TMPDIR", "TMP", "TEMP",
+      "PATH", "HOME", "USERPROFILE", "CODEX_HOME", "TRAE_HOME", "TMPDIR", "TMP", "TEMP",
       "LANG", "LC_ALL", "SSL_CERT_FILE", "SSL_CERT_DIR", "SYSTEMROOT", "COMSPEC",
       "PATHEXT", "NO_COLOR",
+      "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY",
+      "http_proxy", "https_proxy", "all_proxy", "no_proxy",
       // macOS injects this after spawn even when it is absent from the supplied env object.
       "__CF_USER_TEXT_ENCODING",
     ]);

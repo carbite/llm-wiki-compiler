@@ -71,6 +71,7 @@ export const SUPPORTED_PROVIDER_INPUTS = [
   "anthropic",
   "claude-agent",
   "codex-agent",
+  "trae",
   "openai",
   "ollama",
   "minimax",
@@ -94,6 +95,9 @@ export const PROVIDER_MODELS: Record<string, string> = {
   anthropic: "claude-sonnet-4-6",
   "claude-agent": "claude-sonnet-4-6",
   "codex-agent": "codex-cli-default",
+  // TraeCode CLI picks its own available default when unset; llmwiki leaves the
+  // choice to the CLI rather than pinning a model that may rotate.
+  trae: "trae-cli-default",
   openai: "gpt-4o",
   ollama: "llama3.1",
   minimax: "MiniMax-M2.7",

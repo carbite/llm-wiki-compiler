@@ -24,6 +24,8 @@ export interface FakeCodexOptions {
   ignoreTerm?: boolean;
   forkDescendant?: boolean;
   omitOutput?: boolean;
+  /** Executable name to install; defaults to "codex". Use "trae-cli" for the trae provider. */
+  binaryName?: string;
 }
 
 /** One invocation captured by the fake executable. */
@@ -144,7 +146,7 @@ export async function installFakeCodex(options: FakeCodexOptions = {}): Promise<
   const readyPath = path.join(root, "ready");
   const signalPath = path.join(root, "signals.log");
   await import("node:fs/promises").then(({ mkdir }) => mkdir(binDir));
-  const binaryPath = path.join(binDir, "codex");
+  const binaryPath = path.join(binDir, options.binaryName ?? "codex");
   await writeFile(binaryPath, fixtureSource(capturePath, readyPath, signalPath, options), "utf8");
   await chmod(binaryPath, 0o755);
   return {

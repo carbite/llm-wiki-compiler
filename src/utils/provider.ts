@@ -21,6 +21,7 @@ import { OrcaRouterProvider } from "../providers/orcarouter.js";
 import { CopilotProvider } from "../providers/copilot.js";
 import { ClaudeAgentProvider } from "../providers/claude-agent.js";
 import { CodexAgentProvider } from "../providers/codex-agent.js";
+import { TraeAgentProvider } from "../providers/trae-agent.js";
 import {
   AtlasCloudProvider,
   resolveAtlasCloudApiKeyFromEnv,
@@ -96,6 +97,8 @@ export function buildProvider(providerName: string): LLMProvider {
       return getClaudeAgentProvider();
     case "codex-agent":
       return new CodexAgentProvider(readOptionalEnv("LLMWIKI_MODEL"));
+    case "trae":
+      return new TraeAgentProvider(readOptionalEnv("LLMWIKI_MODEL"));
     case "openai":
       return new OpenAIProvider(getModelForProvider("openai"), {
         baseURL: readOptionalEnv("OPENAI_BASE_URL"),
@@ -248,6 +251,9 @@ export function resolveActiveModelId(): string {
   }
   if (providerName === "codex-agent") {
     return readOptionalEnv("LLMWIKI_MODEL") ?? PROVIDER_MODELS["codex-agent"];
+  }
+  if (providerName === "trae") {
+    return readOptionalEnv("LLMWIKI_MODEL") ?? PROVIDER_MODELS.trae;
   }
   return getModelForProvider(
     providerName as "openai" | "ollama" | "minimax" | "copilot" | "atlascloud" | "orcarouter",

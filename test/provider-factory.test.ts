@@ -15,6 +15,8 @@ import { MiniMaxProvider } from "../src/providers/minimax.js";
 import { AtlasCloudProvider } from "../src/providers/atlascloud.js";
 import { ATLASCLOUD_BASE_URL, PROVIDER_MODELS } from "../src/utils/constants.js";
 import { OrcaRouterProvider } from "../src/providers/orcarouter.js";
+import { CodexAgentProvider } from "../src/providers/codex-agent.js";
+import { TraeAgentProvider } from "../src/providers/trae-agent.js";
 
 const TEST_SETTINGS_PATH_ENV = "LLMWIKI_CLAUDE_SETTINGS_PATH";
 const tempDirs: string[] = [];
@@ -187,6 +189,28 @@ describe("getProvider", () => {
     process.env.ORCAROUTER_API_KEY = "test-key";
     const provider = getProvider();
     expect(provider).toBeInstanceOf(OrcaRouterProvider);
+  });
+
+  it("returns CodexAgentProvider when LLMWIKI_PROVIDER=codex-agent", () => {
+    process.env.LLMWIKI_PROVIDER = "codex-agent";
+    expect(getProvider()).toBeInstanceOf(CodexAgentProvider);
+  });
+
+  it("returns TraeAgentProvider when LLMWIKI_PROVIDER=trae", () => {
+    process.env.LLMWIKI_PROVIDER = "trae";
+    expect(getProvider()).toBeInstanceOf(TraeAgentProvider);
+  });
+
+  it("delegates the trae model to the CLI when LLMWIKI_MODEL is unset", () => {
+    process.env.LLMWIKI_PROVIDER = "trae";
+    delete process.env.LLMWIKI_MODEL;
+    expect(resolveActiveModelId()).toBe(PROVIDER_MODELS.trae);
+  });
+
+  it("passes an explicit LLMWIKI_MODEL through for the trae provider", () => {
+    process.env.LLMWIKI_PROVIDER = "trae";
+    process.env.LLMWIKI_MODEL = "Seed-Evolving";
+    expect(resolveActiveModelId()).toBe("Seed-Evolving");
   });
 
   it("throws when ORCAROUTER_API_KEY is absent for orcarouter provider", () => {

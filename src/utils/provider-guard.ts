@@ -58,6 +58,7 @@ const PROVIDER_KEY_VARS: Record<string, string | readonly string[] | null> = {
   anthropic: "ANTHROPIC_API_KEY",
   "claude-agent": null,
   "codex-agent": null,
+  trae: null,
   openai: "OPENAI_API_KEY",
   ollama: null,
   minimax: "MINIMAX_API_KEY",
@@ -108,16 +109,19 @@ export function ensureCompileProviderAvailable(refreshEmbeddings = true): void {
   ensureRequiredProvidersAvailable(refreshEmbeddings && !embeddingsDisabled());
 }
 
+/** Local agent CLIs that cannot embed and must never degrade silently. */
+const NON_EMBEDDING_AGENT_PROVIDERS: ReadonlySet<string> = new Set(["codex-agent", "trae"]);
+
 /** Validate the provider capabilities required by one entry point. */
 function ensureRequiredProvidersAvailable(requireEmbeddings: boolean): void {
   if (requireEmbeddings) ensureEmbeddingProviderAvailable();
   const provider = normalizeProviderName(process.env.LLMWIKI_PROVIDER ?? DEFAULT_PROVIDER);
 
-  if (requireEmbeddings && provider === "codex-agent" && !isEmbeddingProviderExplicit()) {
+  if (requireEmbeddings && NON_EMBEDDING_AGENT_PROVIDERS.has(provider) && !isEmbeddingProviderExplicit()) {
     throw new ProviderUnavailableError(
       provider,
       ["LLMWIKI_EMBEDDING_PROVIDER"],
-      `The "codex-agent" provider cannot serve embeddings and never degrades silently.\n` +
+      `The "${provider}" provider cannot serve embeddings and never degrades silently.\n` +
         `  Set LLMWIKI_EMBEDDING_PROVIDER to an existing embedding backend such as "ollama" or "openai".`,
     );
   }

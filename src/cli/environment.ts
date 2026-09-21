@@ -1,13 +1,15 @@
 /**
- * Load project environment configuration without crossing Codex's credential boundary.
+ * Load project environment configuration without crossing an agent CLI's credential boundary.
  *
- * Explicit `codex-agent` selection must be determined from argv or the inherited
- * shell environment before dotenv can open a project file containing API keys.
+ * Explicit `codex-agent` or `trae` selection must be determined from argv or the
+ * inherited shell environment before dotenv can open a project file containing
+ * API keys.
  */
 
 import { createRequire } from "node:module";
 
-const CODEX_AGENT = "codex-agent";
+/** Agent-CLI providers whose selection suppresses project `.env` loading. */
+const AGENT_PROVIDERS = new Set(["codex-agent", "trae"]);
 const require = createRequire(import.meta.url);
 
 /** Parse one provider option spelling without interpreting other arguments. */
@@ -32,12 +34,12 @@ function providerFlag(argv: string[]): string | undefined {
   return normalizedProvider(providers.reverse().find((value) => value !== undefined));
 }
 
-/** Load `.env` unless explicit effective selection already names Codex Agent. */
+/** Load `.env` unless explicit effective selection names an agent CLI provider. */
 export function loadCliEnvironment(
   argv: string[] = process.argv,
   env: NodeJS.ProcessEnv = process.env,
 ): void {
   const selectedProvider = providerFlag(argv) ?? env.LLMWIKI_PROVIDER?.trim();
-  if (selectedProvider === CODEX_AGENT) return;
+  if (selectedProvider && AGENT_PROVIDERS.has(selectedProvider)) return;
   require("dotenv/config");
 }
