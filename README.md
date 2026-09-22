@@ -331,6 +331,7 @@ llmwiki is still early software, but it is no longer a toy pipeline for a handfu
 
 - **Incremental compilation** means unchanged sources do not flow back through the LLM.
 - **Parallel compile** runs concept extraction and page generation concurrently under a configurable cap (`--concurrency` / `LLMWIKI_COMPILE_CONCURRENCY`), cutting wall-clock on large compiles.
+- **Recoverable extraction** checkpoints each source, retries failed sources after the batch, and preserves successful work across interrupted compiles.
 - **Chunk-level embeddings** narrow large wikis before BM25 reranking and graph expansion.
 - **Content-hash-aware embedding updates** avoid recomputing vectors for unchanged pages and chunks.
 - **Batch embedding** sends page and chunk vectors to the provider in batches rather than one request at a time, cutting latency on cold starts and large refreshes.

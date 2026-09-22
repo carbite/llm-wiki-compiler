@@ -305,6 +305,7 @@ Non-numeric, zero, or negative values are silently ignored and the next source i
 | Variable | Default | Description |
 |---|---|---|
 | `LLMWIKI_COMPILE_CONCURRENCY` | `5` | Maximum LLM calls run in parallel during a compile, across both concept extraction and page generation. Raise it to cut wall-clock on cold starts and large refreshes; lower it to ease a provider's rate limits. Non-positive or non-integer values fall back to the default, and any value above `50` is clamped down with a warning. The `--concurrency` flag on `llmwiki compile`, `llmwiki refresh`, `llmwiki watch`, and `llmwiki quickstart` overrides this for a single run. An invalid `--concurrency` flag value is ignored with a warning, so this variable (or the default) still applies; `quickstart --json` writes that warning to stderr to keep stdout parseable, while human output keeps the warning on stdout |
+| `LLMWIKI_RETRY_COUNT` | `3` | Number of retries after the first LLM request. Set a larger value for agent-backed providers that occasionally return malformed structured output. Values above `20` are clamped to `20`; invalid values fall back to `3`. Backoff is capped at 30 seconds so a higher retry count cannot create multi-hour sleeps |
 
 ---
 
@@ -411,6 +412,9 @@ ANTHROPIC_API_KEY=sk-ant-...
 
 # Optional: raise compile parallelism (or lower it to ease provider rate limits)
 # LLMWIKI_COMPILE_CONCURRENCY=10
+
+# Optional: tolerate more transient or malformed provider responses
+# LLMWIKI_RETRY_COUNT=7
 
 # Optional: activate first-party connectors for this shell
 # LLMWIKI_CONNECTORS=crossref

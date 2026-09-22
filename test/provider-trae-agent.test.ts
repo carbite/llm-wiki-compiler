@@ -8,39 +8,28 @@
  * its diagnostics, and still enforces the shared schema and cleanup contract.
  */
 
-import { access, mkdir, mkdtemp, rm } from "node:fs/promises";
+import { access, mkdir, mkdtemp } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { TraeAgentProvider } from "../src/providers/trae-agent.js";
-import type { LLMTool } from "../src/utils/provider.js";
-import { installFakeCodex, type FakeCodex } from "./fixtures/fake-codex.js";
+import { CONCEPT_EXTRACTION_TOOL } from "../src/compiler/prompts.js";
+import type { FakeCodex } from "./fixtures/fake-codex.js";
+import {
+  CliAgentProviderHarness,
+  STRING_TOOL as TOOL,
+} from "./fixtures/cli-agent-provider-harness.js";
 
-const originalEnv = { ...process.env };
-const fakes: FakeCodex[] = [];
-const tempRoots: string[] = [];
-const TOOL: LLMTool = {
-  name: "return_value",
-  description: "Return one string value",
-  input_schema: {
-    type: "object",
-    properties: { value: { type: "string" } },
-    required: ["value"],
-    additionalProperties: false,
-  },
-};
+const harness = new CliAgentProviderHarness("trae-cli");
 
 /** Install a fake `trae-cli` and steer literal PATH lookup to it. */
-async function useFakeTrae(options: Parameters<typeof installFakeCodex>[0] = {}): Promise<FakeCodex> {
-  const fake = await installFakeCodex({ ...options, binaryName: "trae-cli" });
-  fakes.push(fake);
-  process.env.PATH = `${fake.binDir}${path.delimiter}${originalEnv.PATH ?? ""}`;
-  return fake;
+async function useFakeTrae(
+  options: Parameters<CliAgentProviderHarness["useFake"]>[0] = {},
+): Promise<FakeCodex> {
+  return harness.useFake(options);
 }
 
 afterEach(async () => {
-  process.env = { ...originalEnv };
-  await Promise.all(fakes.splice(0).map((fake) => fake.cleanup()));
-  await Promise.all(tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+  await harness.cleanup();
 });
 
 describe("TraeAgentProvider process boundary", () => {
@@ -49,43 +38,37 @@ describe("TraeAgentProvider process boundary", () => {
     process.env.OPENAI_API_KEY = "sk-parent-must-not-leak";
     const provider = new TraeAgentProvider("Seed-Evolving", { timeoutMs: 2_000 });
 
-    await expect(provider.complete("system", [{ role: "user", content: "source" }], 17))
-      .resolves.toBe("compiled page");
-    const [call] = await fake.calls();
-    expect(call.args).toEqual(expect.arrayContaining([
-      "exec", "--ephemeral", "--sandbox", "read-only", "--skip-git-repo-check",
-      "--ignore-user-config", "--ignore-rules", "--color", "never",
-      "--model", "Seed-Evolving", "-",
-    ]));
-    expect(call.args).not.toContain("--json");
-    expect(call.env.OPENAI_API_KEY).toBeUndefined();
-    await expect(access(call.cwd)).rejects.toThrow();
+    const call = await harness.expectModelCompletion(provider, fake, "compiled page");
+    expect(call.args).toEqual(expect.arrayContaining(["--model", "Seed-Evolving", "-"]));
   });
 
   it("passes no model flag when the operator leaves model selection to the CLI", async () => {
     const fake = await useFakeTrae();
-    await new TraeAgentProvider(undefined, { timeoutMs: 2_000 })
-      .complete("system", [{ role: "user", content: "hello" }], 4096);
-    expect((await fake.calls())[0].args).not.toContain("--model");
+    const provider = new TraeAgentProvider(undefined, { timeoutMs: 2_000 });
+    await harness.expectNoModelFlag(provider, fake);
   });
 
   it("returns schema-valid structured output through the shared engine", async () => {
     const fake = await useFakeTrae({ toolOutput: { value: "safe" } });
     const provider = new TraeAgentProvider(undefined, { timeoutMs: 2_000 });
-    await expect(provider.toolCall("system", [{ role: "user", content: "x" }], [TOOL], 99))
-      .resolves.toBe('{"value":"safe"}');
-    const [call] = await fake.calls();
-    expect(call.args).toContain("--output-schema");
-    await expect(access(call.cwd)).rejects.toThrow();
+    await harness.expectStructuredSuccess(provider, fake);
+  });
+
+  it("repairs omitted extraction defaults and string contradiction slugs", async () => {
+    await useFakeTrae({ toolOutput: {
+      concepts: [{ concept: "Topic", summary: "Summary", contradicted_by: ["other-topic"] }],
+    } });
+    const provider = new TraeAgentProvider(undefined, { timeoutMs: 2_000 });
+    const raw = await provider.toolCall(
+      "system", [{ role: "user", content: "x" }], [CONCEPT_EXTRACTION_TOOL], 99,
+    );
+    expect(JSON.parse(raw)).toMatchObject({
+      concepts: [{ concept: "Topic", is_new: true, contradicted_by: [{ slug: "other-topic" }] }],
+    });
   });
 
   it("names TraeCode CLI when the binary is absent", async () => {
-    const root = await mkdtemp(path.join(process.env.TMPDIR ?? "/tmp", "llmwiki-trae-missing-"));
-    tempRoots.push(root);
-    const emptyBin = path.join(root, "bin");
-    await mkdir(emptyBin);
-    process.env.TMPDIR = root;
-    process.env.PATH = emptyBin;
+    await harness.prepareMissingBinary("llmwiki-trae-missing-");
     await expect(new TraeAgentProvider(undefined, { timeoutMs: 2_000 })
       .complete("system", [{ role: "user", content: "x" }], 1))
       .rejects.toThrow(/TraeCode CLI.*not installed/i);
@@ -110,7 +93,7 @@ describe("TraeAgentProvider process boundary", () => {
 
   it("keeps a missing binary non-retryable", async () => {
     const root = await mkdtemp(path.join(process.env.TMPDIR ?? "/tmp", "llmwiki-trae-nonretry-"));
-    tempRoots.push(root);
+    harness.trackRoot(root);
     const emptyBin = path.join(root, "bin");
     await mkdir(emptyBin);
     process.env.TMPDIR = root;

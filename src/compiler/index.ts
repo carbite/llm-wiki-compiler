@@ -389,6 +389,34 @@ async function seedThenFinalize(
   });
 }
 
+interface NoChangeContext {
+  root: string;
+  schema: SchemaConfig;
+  options: CompileOptions;
+  draft: CompileStateDraft;
+  buckets: ChangeBuckets;
+  reconciliationSlugs: ReadonlySet<string>;
+}
+
+/** Finish a compile whose source set is already current. */
+async function finishNoChangeCompile(context: NoChangeContext): Promise<CompileResult> {
+  const { root, schema, options, draft, buckets, reconciliationSlugs } = context;
+  output.status("✓", output.success("Nothing to compile — all sources up to date."));
+  if (options.review) return { ...emptyCompileResult(), skipped: buckets.unchanged.length };
+  const mutated = await reconcileOwnerlessFrozen(root, draft, reconciliationSlugs);
+  const generation: PageGenerationResult = {
+    pages: [], writtenPages: [], errors: [], candidates: [],
+    review: { held: [], forced: [] }, seedSlugs: [],
+  };
+  await seedThenFinalize(root, schema, generation, options, mutated ? draft : null);
+  return {
+    ...emptyCompileResult(),
+    skipped: buckets.unchanged.length,
+    pages: [...generation.seedSlugs],
+    errors: generation.errors,
+  };
+}
+
 /** Inner pipeline, runs under lock protection. Returns structured CompileResult. */
 async function runCompilePipeline(
   root: string,
@@ -414,42 +442,9 @@ async function runCompilePipeline(
 
   const buckets = bucketChanges(changes);
   if (buckets.toCompile.length === 0 && buckets.deleted.length === 0) {
-    output.status("✓", output.success("Nothing to compile — all sources up to date."));
-    // Seed pages are cheap deterministic writes — always run them even when
-    // no source files changed, so adding a seed page to schema.json takes
-    // effect on the next compile without needing a source file edit.
-    if (!options.review) {
-      const hasOwnerlessFrozen = await reconcileOwnerlessFrozen(
-        root, draft, reconciliationSlugs,
-      );
-      const emptyGeneration: PageGenerationResult = {
-        pages: [],
-        writtenPages: [],
-        errors: [],
-        candidates: [],
-        review: { held: [], forced: [] },
-        seedSlugs: [],
-      };
-      // Ownerless frozen reconciliation mutates the draft; otherwise null keeps
-      // the no-change path from rewriting state unnecessarily.
-      await seedThenFinalize(
-        root,
-        schema,
-        emptyGeneration,
-        options,
-        hasOwnerlessFrozen ? draft : null,
-      );
-      return {
-        ...emptyCompileResult(),
-        skipped: buckets.unchanged.length,
-        // Surface seed-page slugs alongside any errors so downstream
-        // consumers (MCP, embeddings, programmatic callers) can see what
-        // landed even on the no-source-changes early-return path.
-        pages: [...emptyGeneration.seedSlugs],
-        errors: emptyGeneration.errors,
-      };
-    }
-    return { ...emptyCompileResult(), skipped: buckets.unchanged.length };
+    return finishNoChangeCompile({
+      root, schema, options, draft, buckets, reconciliationSlugs,
+    });
   }
 
   printChangesSummary(changes);
@@ -515,7 +510,10 @@ async function runCompilePipeline(
     await logCompile(root, buckets, generation, existingIds);
   }
   verbose(`compile finished in ${Date.now() - startMs} ms`);
-  return summarizeCompile(buckets, generation, extractions, options);
+  const result = summarizeCompile(buckets, generation, extractions, options);
+  const fatalError = extractions.find((item) => item.fatalError)?.fatalError;
+  if (fatalError) throw fatalError;
+  return result;
 }
 
 /**

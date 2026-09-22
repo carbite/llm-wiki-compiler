@@ -109,6 +109,7 @@ export const CONCEPT_EXTRACTION_TOOL = {
             },
             is_new: {
               type: "boolean",
+              default: true,
               description: "True if this is a new concept not in existing wiki",
             },
             tags: {
@@ -266,18 +267,23 @@ function isValidRawConcept(c: RawConcept): boolean {
   );
 }
 
+/** Coerce one raw contradiction entry into a typed reference. */
+function coerceContradiction(entry: unknown): ContradictionRef | undefined {
+  if (typeof entry === "string") {
+    return entry.trim() ? { slug: entry.trim() } : undefined;
+  }
+  if (!entry || typeof entry !== "object") return undefined;
+  const obj = entry as { slug?: unknown; reason?: unknown };
+  if (typeof obj.slug !== "string" || !obj.slug.trim()) return undefined;
+  const ref: ContradictionRef = { slug: obj.slug.trim() };
+  if (typeof obj.reason === "string") ref.reason = obj.reason;
+  return ref;
+}
+
 /** Coerce raw contradiction entries from the tool into typed refs. */
 function coerceContradictedBy(raw: unknown): ContradictionRef[] | undefined {
   if (!Array.isArray(raw)) return undefined;
-  const refs: ContradictionRef[] = [];
-  for (const entry of raw) {
-    if (!entry || typeof entry !== "object") continue;
-    const obj = entry as { slug?: unknown; reason?: unknown };
-    if (typeof obj.slug !== "string" || obj.slug.trim().length === 0) continue;
-    const ref: ContradictionRef = { slug: obj.slug.trim() };
-    if (typeof obj.reason === "string") ref.reason = obj.reason;
-    refs.push(ref);
-  }
+  const refs = raw.map(coerceContradiction).filter((ref): ref is ContradictionRef => Boolean(ref));
   return refs.length > 0 ? refs : undefined;
 }
 

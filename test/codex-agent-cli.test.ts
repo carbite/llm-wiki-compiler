@@ -8,19 +8,19 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { access, chmod, copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { access, chmod, copyFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { useAimockLifecycle } from "./fixtures/aimock-helper.js";
-import { installFakeCodex, type FakeCodex } from "./fixtures/fake-codex.js";
+import type { FakeCodex } from "./fixtures/fake-codex.js";
 import { CLI, expectCLIFailure, expectCLIExit, runCLI } from "./fixtures/run-cli.js";
+import { CliAgentCompileHarness } from "./fixtures/cli-agent-compile-harness.js";
 import { EMBEDDINGS_FILE, PENDING_EMBEDDINGS_FILE } from "../src/utils/constants.js";
 
 const aimock = useAimockLifecycle("codex-agent-cli");
-const fakes: FakeCodex[] = [];
 const tempRoots: string[] = [];
-const EMBEDDING_PRELOAD = path.resolve("test/fixtures/mock-embeddings.mjs");
+const agent = new CliAgentCompileHarness("codex", "codex-agent", "Codex");
 
 /** Copy Node with any adjacent runtime libraries needed after relocation. */
 async function copyNodeRuntime(runtime: string): Promise<string> {
@@ -40,40 +40,24 @@ async function copyNodeRuntime(runtime: string): Promise<string> {
 }
 
 /** Install the process-boundary fake and register it for cleanup. */
-async function fakeCodex(options: Parameters<typeof installFakeCodex>[0] = {}): Promise<FakeCodex> {
-  const fake = await installFakeCodex(options);
-  fakes.push(fake);
-  return fake;
+async function fakeCodex(
+  options: Parameters<CliAgentCompileHarness["install"]>[0] = {},
+): Promise<FakeCodex> {
+  return agent.install(options);
 }
 
 /** Environment for Codex chat plus an explicit keyless embedding backend. */
 function codexEnv(fake: FakeCodex): NodeJS.ProcessEnv {
-  return {
-    PATH: `${fake.binDir}${path.delimiter}${process.env.PATH ?? ""}`,
-    NODE_OPTIONS: `--import=${EMBEDDING_PRELOAD}`,
-    LLMWIKI_PROVIDER: "codex-agent",
-    LLMWIKI_EMBEDDING_PROVIDER: "ollama",
-    OLLAMA_HOST: "http://127.0.0.1:1/v1",
-    OLLAMA_EMBEDDINGS_HOST: "http://127.0.0.1:1/v1",
-    OPENAI_API_KEY: "sk-parent-trap-must-not-reach-codex",
-  };
+  return agent.environment(fake);
 }
 
 /** Valid extraction result used by the real compile pipeline. */
 function extractedConcept(): unknown {
-  return {
-    concepts: [{
-      concept: "Codex Agent Concept",
-      summary: "Produced through the process-boundary Codex fake.",
-      is_new: true,
-      tags: ["codex"],
-      confidence: 0.9,
-    }],
-  };
+  return agent.extraction();
 }
 
 afterEach(async () => {
-  for (const fake of fakes.splice(0)) await fake.cleanup();
+  await agent.cleanup();
   for (const root of tempRoots.splice(0)) await rm(root, { recursive: true, force: true });
 });
 
@@ -107,19 +91,7 @@ describe("codex-agent through the real llmwiki CLI", () => {
     const result = await runCLI(args, cwd, env);
 
     expectCLIExit(result, 0);
-    const pages = await readdir(path.join(cwd, "wiki", "concepts"));
-    expect(pages).toHaveLength(1);
-    expect(await readFile(path.join(cwd, "wiki", "concepts", pages[0]), "utf8"))
-      .toContain("Compiled by the Codex CLI provider");
-    const calls = await fake.calls();
-    expect(calls.length).toBeGreaterThanOrEqual(2);
-    expect(calls.some((call) => call.args.includes("--output-schema"))).toBe(true);
-    expect(calls.some((call) => !call.args.includes("--output-schema"))).toBe(true);
-    for (const call of calls) {
-      expect(call.env.OPENAI_API_KEY).toBeUndefined();
-      expect(call.env.NODE_OPTIONS).toBeUndefined();
-      await expect(access(call.cwd)).rejects.toThrow();
-    }
+    await agent.expectSuccessfulCompile(cwd, fake, "Compiled by the Codex CLI provider");
   }, 30_000);
 
   it("runs compile without an embedding backend when refreshes are disabled", async () => {
@@ -212,9 +184,7 @@ describe("codex-agent through the real llmwiki CLI", () => {
       LLMWIKI_EMBEDDING_PROVIDER: "",
       OPENAI_API_KEY: "sk-must-not-be-used",
     });
-    expectCLIFailure(result);
-    expect(result.stderr).toMatch(/codex-agent[\s\S]*LLMWIKI_EMBEDDING_PROVIDER/i);
-    expect(await fake.calls()).toEqual([]);
+    await agent.expectEmbeddingPreflightFailure(result, fake);
   });
 
   it("keeps the embedding preflight on query when refreshes are disabled", async () => {

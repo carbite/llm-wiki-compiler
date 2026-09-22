@@ -6,7 +6,7 @@
  * are still retried as before.
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { afterEach, describe, it, expect, vi, beforeEach } from "vitest";
 
 const mockComplete = vi.hoisted(() => vi.fn());
 
@@ -18,8 +18,14 @@ vi.mock("../src/utils/provider.js", () => ({
   }),
 }));
 
-import { callClaude, computeBackoffMs } from "../src/utils/llm.js";
-import { RETRY_BASE_MS, RETRY_MULTIPLIER } from "../src/utils/constants.js";
+import { callClaude, computeBackoffMs, resolveRetryCount } from "../src/utils/llm.js";
+import {
+  ENV_RETRY_COUNT,
+  RETRY_BASE_MS,
+  RETRY_COUNT,
+  RETRY_COUNT_MAX,
+  RETRY_MULTIPLIER,
+} from "../src/utils/constants.js";
 
 const BASE_OPTIONS = {
   system: "s",
@@ -42,6 +48,23 @@ describe("computeBackoffMs jitter", () => {
   it("jitters so concurrent retries do not fire in lockstep", () => {
     const samples = new Set(Array.from({ length: 40 }, () => computeBackoffMs(1)));
     expect(samples.size).toBeGreaterThan(1);
+  });
+});
+
+describe("resolveRetryCount", () => {
+  afterEach(() => delete process.env[ENV_RETRY_COUNT]);
+
+  it("uses the default when the environment override is absent or invalid", () => {
+    expect(resolveRetryCount()).toBe(RETRY_COUNT);
+    process.env[ENV_RETRY_COUNT] = "invalid";
+    expect(resolveRetryCount()).toBe(RETRY_COUNT);
+  });
+
+  it("accepts zero and caps large retry overrides", () => {
+    process.env[ENV_RETRY_COUNT] = "0";
+    expect(resolveRetryCount()).toBe(0);
+    process.env[ENV_RETRY_COUNT] = "999";
+    expect(resolveRetryCount()).toBe(RETRY_COUNT_MAX);
   });
 });
 

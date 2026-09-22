@@ -60,8 +60,11 @@ export const ENV_COMPILE_CONCURRENCY = "LLMWIKI_COMPILE_CONCURRENCY";
 
 /** API retry configuration. */
 export const RETRY_COUNT = 3;
+export const RETRY_COUNT_MAX = 20;
+export const ENV_RETRY_COUNT = "LLMWIKI_RETRY_COUNT";
 export const RETRY_BASE_MS = 1000;
 export const RETRY_MULTIPLIER = 4;
+export const RETRY_MAX_DELAY_MS = 30_000;
 
 /** Default provider when LLMWIKI_PROVIDER is not set. */
 export const DEFAULT_PROVIDER = "anthropic";
@@ -160,6 +163,12 @@ export const WORKFLOW_PROJECTION_DIR = "wiki/outputs/workflows";
 export const LLMWIKI_DIR = ".llmwiki";
 export const PROFILE_FILE = ".llmwiki/profile.json";
 export const STATE_FILE = ".llmwiki/state.json";
+
+/** Per-source extraction checkpoints for interruption and failure recovery. */
+export const EXTRACTION_CHECKPOINTS_DIR = ".llmwiki/extraction-checkpoints";
+
+/** Upper bound for one extraction checkpoint, including source-derived JSON. */
+export const MAX_EXTRACTION_CHECKPOINT_BYTES = 2 * 1024 * 1024;
 export const LOCK_FILE = ".llmwiki/lock";
 
 /**

@@ -22,6 +22,10 @@ export interface ExtractionResult {
   sourcePath: string;
   sourceContent: string;
   concepts: ExtractedConcept[];
+  /** Final extraction failure after the batch retry; absent on success. */
+  error?: string;
+  /** Non-retryable provider failure rethrown after successful sources commit. */
+  fatalError?: Error;
 }
 
 /**

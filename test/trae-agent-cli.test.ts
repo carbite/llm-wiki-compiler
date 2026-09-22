@@ -10,52 +10,35 @@
  * embeddings with a trae-named remediation.
  */
 
-import { access, readFile, readdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { useAimockLifecycle } from "./fixtures/aimock-helper.js";
-import { installFakeCodex, type FakeCodex } from "./fixtures/fake-codex.js";
+import type { FakeCodex } from "./fixtures/fake-codex.js";
 import { expectCLIFailure, expectCLIExit, runCLI } from "./fixtures/run-cli.js";
+import { CliAgentCompileHarness } from "./fixtures/cli-agent-compile-harness.js";
 
 const aimock = useAimockLifecycle("trae-agent-cli");
-const fakes: FakeCodex[] = [];
-const EMBEDDING_PRELOAD = path.resolve("test/fixtures/mock-embeddings.mjs");
+const agent = new CliAgentCompileHarness("trae-cli", "trae", "Trae");
 
 /** Install a fake `trae-cli` at the executable boundary and register cleanup. */
-async function fakeTrae(options: Parameters<typeof installFakeCodex>[0] = {}): Promise<FakeCodex> {
-  const fake = await installFakeCodex({ ...options, binaryName: "trae-cli" });
-  fakes.push(fake);
-  return fake;
+async function fakeTrae(
+  options: Parameters<CliAgentCompileHarness["install"]>[0] = {},
+): Promise<FakeCodex> {
+  return agent.install(options);
 }
 
 /** Environment for trae chat plus an explicit keyless embedding backend. */
 function traeEnv(fake: FakeCodex): NodeJS.ProcessEnv {
-  return {
-    PATH: `${fake.binDir}${path.delimiter}${process.env.PATH ?? ""}`,
-    NODE_OPTIONS: `--import=${EMBEDDING_PRELOAD}`,
-    LLMWIKI_PROVIDER: "trae",
-    LLMWIKI_EMBEDDING_PROVIDER: "ollama",
-    OLLAMA_HOST: "http://127.0.0.1:1/v1",
-    OLLAMA_EMBEDDINGS_HOST: "http://127.0.0.1:1/v1",
-    OPENAI_API_KEY: "sk-parent-trap-must-not-reach-trae",
-  };
+  return agent.environment(fake);
 }
 
 /** Valid extraction result used by the real compile pipeline. */
 function extractedConcept(): unknown {
-  return {
-    concepts: [{
-      concept: "Trae Agent Concept",
-      summary: "Produced through the process-boundary trae-cli fake.",
-      is_new: true,
-      tags: ["trae"],
-      confidence: 0.9,
-    }],
-  };
+  return agent.extraction();
 }
 
 afterEach(async () => {
-  for (const fake of fakes.splice(0)) await fake.cleanup();
+  await agent.cleanup();
 });
 
 describe("trae through the real llmwiki CLI", () => {
@@ -73,19 +56,7 @@ describe("trae through the real llmwiki CLI", () => {
     const result = await runCLI(args, cwd, env);
 
     expectCLIExit(result, 0);
-    const pages = await readdir(path.join(cwd, "wiki", "concepts"));
-    expect(pages).toHaveLength(1);
-    expect(await readFile(path.join(cwd, "wiki", "concepts", pages[0]), "utf8"))
-      .toContain("Compiled by the TraeCode CLI provider");
-    const calls = await fake.calls();
-    expect(calls.length).toBeGreaterThanOrEqual(2);
-    expect(calls.some((call) => call.args.includes("--output-schema"))).toBe(true);
-    expect(calls.some((call) => !call.args.includes("--output-schema"))).toBe(true);
-    for (const call of calls) {
-      expect(call.env.OPENAI_API_KEY).toBeUndefined();
-      expect(call.env.NODE_OPTIONS).toBeUndefined();
-      await expect(access(call.cwd)).rejects.toThrow();
-    }
+    await agent.expectSuccessfulCompile(cwd, fake, "Compiled by the TraeCode CLI provider");
   }, 30_000);
 
   it("fails before invoking trae-cli when no embedding provider is explicit", async () => {
@@ -97,9 +68,7 @@ describe("trae through the real llmwiki CLI", () => {
       LLMWIKI_EMBEDDING_PROVIDER: "",
       OPENAI_API_KEY: "sk-must-not-be-used",
     });
-    expectCLIFailure(result);
-    expect(result.stderr).toMatch(/trae[\s\S]*LLMWIKI_EMBEDDING_PROVIDER/i);
-    expect(await fake.calls()).toEqual([]);
+    await agent.expectEmbeddingPreflightFailure(result, fake);
   });
 
   it("fails actionably naming TraeCode CLI when the binary is absent", async () => {

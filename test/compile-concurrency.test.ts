@@ -179,24 +179,22 @@ describe("compile extraction concurrency", () => {
     expect(peak()).toBe(2);
   });
 
-  it("stops issuing extractions once a source fails, instead of draining the queue", async () => {
+  it("continues the batch and retries only a transiently failed source", async () => {
     root = await makeMultiSourceRoot("abort", {
       "a.md": "# A\n\na", "b.md": "# B\n\nb", "c.md": "# C\n\nc", "d.md": "# D\n\nd",
     });
     let calls = 0;
     vi.spyOn(AnthropicProvider.prototype, "toolCall").mockImplementation(async () => {
       calls++;
-      if (calls === 2) throw new Error("401 unauthorized"); // non-retriable: no backoff
+      if (calls === 2) throw new Error("401 unauthorized"); // no inner retry; batch retry handles it
       return JSON.stringify({ concepts: [conceptRecord(`C${calls}`)] });
     });
     vi.spyOn(AnthropicProvider.prototype, "complete").mockResolvedValue("body\n");
 
-    await expect(compileAndReport(root, { concurrency: 1 })).rejects.toThrow();
-    // Drain any still-queued pool tasks while the mock is active, so the count
-    // is deterministic. Without short-circuiting, the pLimit pool runs all 4
-    // sources even though the compile is already doomed; the guard skips the rest.
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(calls).toBeLessThan(4);
+    const result = await compileAndReport(root, { concurrency: 1 });
+
+    expect(result.errors).toEqual([]);
+    expect(calls).toBe(5); // four first-pass calls, then only the failed source
   });
 
   it("runs every source at once when the cap exceeds the source count", async () => {

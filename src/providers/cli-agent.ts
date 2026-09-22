@@ -24,6 +24,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import Ajv from "ajv";
 import { toCodexOutputSchema } from "./codex-output-schema.js";
+import { parseRepairableJson, repairStructuredValue } from "./structured-json-repair.js";
 import type { LLMMessage, LLMProvider, LLMTool } from "../utils/provider.js";
 import { registerCodexProcess, signalCodexTree } from "./codex-agent-lifecycle.js";
 
@@ -66,7 +67,7 @@ const DEFAULT_ENV_ALLOWLIST = [
   "PATHEXT",
 ] as const;
 
-const ajv = new Ajv({ allErrors: true, strict: false });
+const ajv = new Ajv({ allErrors: true, strict: false, useDefaults: true });
 
 /** The CLI-specific identity and wording an agent provider is built from. */
 export interface CliAgentConfig {
@@ -391,15 +392,14 @@ export class CliAgentProvider implements LLMProvider {
     }
     const schema = tools[0].input_schema;
     const raw = await this.invoke(buildPrompt(system, messages, true), toCodexOutputSchema(schema));
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
+    const repaired = parseRepairableJson(raw);
+    if (!repaired) {
       throw new CliAgentError(
         `${this.config.displayName} returned invalid JSON for a structured request.`,
         { retryable: true },
       );
     }
+    const parsed = repairStructuredValue(tools[0].name, repaired.value);
     const validate = ajv.compile(schema);
     if (!validate(parsed)) {
       throw new CliAgentError(

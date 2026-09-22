@@ -4,8 +4,8 @@
  * Owns the single responsibility of turning source files into
  * {@link ExtractionResult}s via the LLM: reading each source, sending it (with
  * the confined wiki index as dedup context) to the extraction model, and
- * fanning the batch out under a shared concurrency limit with first-failure
- * short-circuit. Expands the directly-changed batch to any unchanged sources
+ * fanning the batch out under a shared concurrency limit with per-source
+ * recovery. Expands the directly-changed batch to any unchanged sources
  * whose concepts overlap newly-extracted slugs. No pages are written here — the
  * results feed the page-generation phase in the orchestration spine.
  */
@@ -26,6 +26,12 @@ import {
   findLateAffectedSources,
   type ExtractionResult,
 } from "./deps.js";
+import {
+  extractionFingerprint,
+  loadExtractionCheckpoint,
+  saveExtractionCheckpoint,
+  saveExtractionFailure,
+} from "./extraction-checkpoints.js";
 import * as output from "../utils/output.js";
 import { verbose } from "../utils/output.js";
 import { INDEX_FILE, SOURCES_DIR } from "../utils/constants.js";
@@ -36,32 +42,88 @@ import type {
   WikiState,
 } from "../utils/types.js";
 
-/**
- * Extract a batch of sources in parallel under a shared concurrency limit.
- *
- * Promise.all preserves input order, so the result matches the old serial
- * order that mergeExtractions relies on when reconciling same-slug concepts.
- * On the first hard failure a shared `aborted` flag short-circuits every
- * not-yet-started source: pLimit keeps draining its queue after Promise.all
- * rejects, and without this guard those queued sources would still issue their
- * (now-pointless) LLM calls — wasted cost/quota exactly when the provider is
- * already failing. In-flight sources still finish; only the queue is skipped.
- */
-async function extractSourcesLimited(
+interface ExtractionContext {
+  root: string;
+  existingIndex: string;
+  limit: ReturnType<typeof pLimit>;
+}
+
+type ExtractionAttempt =
+  | { file: string; result: ExtractionResult }
+  | { file: string; error: unknown };
+
+/** Infrastructure errors cannot improve by repeating the same source. */
+function isNonRetryable(error: unknown): boolean {
+  return (error as { nonRetryable?: unknown })?.nonRetryable === true;
+}
+
+/** Narrow an attempt to its failure branch. */
+function isFailedAttempt(item: ExtractionAttempt): item is { file: string; error: unknown } {
+  return "error" in item;
+}
+
+/** Run one source without allowing its failure to reject the whole batch. */
+async function attemptSource(context: ExtractionContext, file: string): Promise<ExtractionAttempt> {
+  return context.limit(async () => {
+    try {
+      return { file, result: await extractForSource(context.root, file, context.existingIndex) };
+    } catch (error) {
+      return { file, error };
+    }
+  });
+}
+
+/** Extract every file in input order while all provider calls settle. */
+function attemptRound(context: ExtractionContext, files: string[]): Promise<ExtractionAttempt[]> {
+  return Promise.all(files.map((file) => attemptSource(context, file)));
+}
+
+/** Materialize a final failed source so downstream state marks it retryable. */
+async function failedResult(root: string, file: string, error: unknown): Promise<ExtractionResult> {
+  const sourcePath = path.join(root, SOURCES_DIR, file);
+  const sourceContent = await readFile(sourcePath, "utf-8");
+  const message = error instanceof Error ? error.message : String(error);
+  return {
+    sourceFile: file,
+    sourcePath,
+    sourceContent,
+    concepts: [],
+    error: message,
+    fatalError: isNonRetryable(error)
+      ? (error instanceof Error ? error : new Error(message))
+      : undefined,
+  };
+}
+
+/** Convert settled attempts to ordered extraction results. */
+function materializeAttempts(
   root: string,
   files: string[],
-  limit: ReturnType<typeof pLimit>,
+  attempts: Map<string, ExtractionAttempt>,
 ): Promise<ExtractionResult[]> {
-  let aborted = false;
-  return Promise.all(files.map((file) => limit(async () => {
-    if (aborted) throw new Error(`extraction skipped for ${file}: a prior source failed`);
-    try {
-      return await extractForSource(root, file);
-    } catch (err) {
-      aborted = true;
-      throw err;
-    }
-  })));
+  return Promise.all(files.map(async (file) => {
+    const item = attempts.get(file)!;
+    return isFailedAttempt(item) ? failedResult(root, file, item.error) : item.result;
+  }));
+}
+
+/** Retry only first-round failures, then return one ordered result per file. */
+async function extractSourcesRecoverable(
+  context: ExtractionContext,
+  files: string[],
+): Promise<ExtractionResult[]> {
+  const first = await attemptRound(context, files);
+  const byFile = new Map<string, ExtractionAttempt>();
+  for (const item of first) byFile.set(item.file, item);
+  const failedFiles = first
+    .filter(isFailedAttempt)
+    .filter((item) => !isNonRetryable(item.error))
+    .map((item) => item.file);
+  if (failedFiles.length === 0) return materializeAttempts(context.root, files, byFile);
+  output.status("↻", output.warn(`Retrying ${failedFiles.length} failed source extraction(s)...`));
+  const retried = await attemptRound(context, failedFiles);
+  for (const item of retried) byFile.set(item.file, item);
+  return materializeAttempts(context.root, files, byFile);
 }
 
 /**
@@ -91,7 +153,9 @@ export async function runExtractionPhases(
   concurrency: number,
 ): Promise<ExtractionResult[]> {
   const limit = pLimit(concurrency);
-  const extractions = await extractSourcesLimited(root, toCompile.map((c) => c.file), limit);
+  const existingIndex = await readConfinedExtractionIndex(root);
+  const context = { root, existingIndex, limit };
+  const extractions = await extractSourcesRecoverable(context, toCompile.map((c) => c.file));
 
   while (true) {
     const extracted = new Set(extractions.map((result) => result.sourceFile));
@@ -102,7 +166,7 @@ export async function runExtractionPhases(
     for (const file of lateAffected) {
       output.status("~", output.info(`${file} [shares concept with new source]`));
     }
-    const batch = await extractSourcesLimited(root, lateAffected, limit);
+    const batch = await extractSourcesRecoverable(context, lateAffected);
     extractions.push(...batch);
   }
 
@@ -116,6 +180,7 @@ export async function runExtractionPhases(
 async function extractForSource(
   root: string,
   sourceFile: string,
+  existingIndex: string,
 ): Promise<ExtractionResult> {
   output.status("*", output.info(`Extracting: ${sourceFile}`));
 
@@ -124,14 +189,35 @@ async function extractForSource(
   const lines = sourceContent.split("\n").length;
   const chars = sourceContent.length;
   verbose(`source ${sourceFile}: ${lines} lines, ${chars} chars`);
-  const existingIndex = await readConfinedExtractionIndex(root);
-  const concepts = await extractConcepts(sourceContent, existingIndex);
-
-  if (concepts.length > 0) {
-    const names = concepts.map((c) => c.concept).join(", ");
-    output.status("*", output.dim(`  Found ${concepts.length} concepts: ${names}`));
+  const system = buildExtractionPrompt(sourceContent, existingIndex);
+  const fingerprint = extractionFingerprint(system, CONCEPT_EXTRACTION_TOOL);
+  const cached = await loadExtractionCheckpoint(root, sourceFile, fingerprint);
+  const cachedConcepts = cached === null ? [] : parseConcepts(cached);
+  if (cachedConcepts.length > 0) {
+    output.status("↳", output.dim(`Reusing extraction checkpoint: ${sourceFile}`));
+    reportConcepts(cachedConcepts);
+    return { sourceFile, sourcePath, sourceContent, concepts: cachedConcepts };
   }
+  const rawOutput = await extractConcepts(system).catch(async (error: unknown) => {
+    await saveExtractionFailure(root, sourceFile, fingerprint, error);
+    throw error;
+  });
+  const concepts = parseConcepts(rawOutput);
+  if (concepts.length === 0) {
+    const error = new Error("structured extraction returned no valid concepts");
+    await saveExtractionFailure(root, sourceFile, fingerprint, error);
+    throw error;
+  }
+  await saveExtractionCheckpoint(root, sourceFile, fingerprint, rawOutput);
+
+  reportConcepts(concepts);
   return { sourceFile, sourcePath, sourceContent, concepts };
+}
+
+/** Print one successful extraction in the existing CLI format. */
+function reportConcepts(concepts: ExtractedConcept[]): void {
+  const names = concepts.map((concept) => concept.concept).join(", ");
+  output.status("*", output.dim(`  Found ${concepts.length} concepts: ${names}`));
 }
 
 /**
@@ -161,16 +247,10 @@ async function readConfinedExtractionIndex(root: string): Promise<string> {
  * @param existingIndex - Current wiki index for deduplication.
  * @returns Parsed array of extracted concepts.
  */
-async function extractConcepts(
-  sourceContent: string,
-  existingIndex: string,
-): Promise<ExtractedConcept[]> {
-  const system = buildExtractionPrompt(sourceContent, existingIndex);
-  const rawOutput = await callClaude({
+async function extractConcepts(system: string): Promise<string> {
+  return callClaude({
     system,
     messages: [{ role: "user", content: "Extract the key concepts from this source." }],
     tools: [CONCEPT_EXTRACTION_TOOL],
   });
-
-  return parseConcepts(rawOutput);
 }

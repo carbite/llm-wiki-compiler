@@ -6,7 +6,7 @@ description: "llmwiki compile runs the incremental two-phase LLM pipeline to ext
 
 Compiling is the step that turns raw source files into a structured, interlinked wiki. When you run `llmwiki compile`, the pipeline runs in two phases: **Phase 1** reads every changed source in `sources/` and asks the LLM to extract all concepts, entities, and topics it finds. **Phase 2** takes those extracted concepts and generates typed wiki pages - one Markdown file per concept, with YAML frontmatter, paragraph-level citations back to source line ranges, and `[[wikilinks]]` connecting related concepts.
 
-Splitting into two phases matters: by completing all extraction before any pages are written, the compiler can merge concepts that appear across multiple sources into a single page, catch extraction failures before anything is committed to disk, and resolve cross-references that would be impossible to wire up in a single pass.
+Splitting into two phases matters: by completing extraction before pages are written, the compiler can merge concepts that appear across multiple sources into a single page and resolve cross-references that would be impossible to wire up in a single pass. Successful source extractions are checkpointed under `.llmwiki/extraction-checkpoints/` as they finish. A failed source does not stop the batch; llmwiki finishes the first pass, retries only failed sources, and keeps final failures retryable for the next compile.
 
 ## Basic usage
 
@@ -124,6 +124,10 @@ file is dropped. The pass uses no model calls.
 ## Incremental behaviour
 
 Compile is hash-based and incremental. Each source file's content is fingerprinted on ingest; on subsequent compiles, only sources whose content hash has changed are re-processed through the LLM. When sources and generation settings are unchanged, compile skips extraction and page generation: it makes no chat-model calls and does not regenerate those pages. Embedding reconciliation still runs as described below.
+
+Extraction checkpoints are keyed by the exact source prompt, provider, model and tool schema. A crash after some sources finish can therefore reuse only matching results; changing any of those inputs invalidates the old checkpoint. Structured CLI-agent output is repaired locally when it is only fenced, explained, double-encoded or contains trailing commas. Responses that still fail schema validation use the normal retry loop. Increase [`LLMWIKI_RETRY_COUNT`](/configuration/environment-variables#compile) when a provider needs more than the default three retries.
+
+If a source still fails after the batch retry, llmwiki records the error in its per-source checkpoint, continues generating pages from successful sources, and leaves the failed source marked for the next compile. A later compile calls the model only for those failed or otherwise changed sources.
 
 Embedding reuse depends on page content and the active embedding configuration, independently of source compilation state.
 

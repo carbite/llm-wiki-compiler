@@ -6,7 +6,14 @@
  * The provider is selected via LLMWIKI_PROVIDER env var (see provider.ts).
  */
 
-import { RETRY_COUNT, RETRY_BASE_MS, RETRY_MULTIPLIER } from "./constants.js";
+import {
+  ENV_RETRY_COUNT,
+  RETRY_BASE_MS,
+  RETRY_COUNT,
+  RETRY_COUNT_MAX,
+  RETRY_MAX_DELAY_MS,
+  RETRY_MULTIPLIER,
+} from "./constants.js";
 import { getProvider } from "./provider.js";
 import type { LLMMessage, LLMTool } from "./provider.js";
 import { note } from "./output.js";
@@ -54,8 +61,22 @@ function isNonRetriable(error: unknown): boolean {
  * @returns Delay in milliseconds for this attempt.
  */
 export function computeBackoffMs(attempt: number): number {
-  const base = RETRY_BASE_MS * Math.pow(RETRY_MULTIPLIER, attempt);
+  const base = Math.min(
+    RETRY_MAX_DELAY_MS,
+    RETRY_BASE_MS * Math.pow(RETRY_MULTIPLIER, attempt),
+  );
   return Math.round(base / 2 + Math.random() * (base / 2));
+}
+
+/** Resolve the environment-configurable retry count with a bounded fallback. */
+export function resolveRetryCount(): number {
+  const raw = process.env[ENV_RETRY_COUNT]?.trim();
+  if (!raw) return RETRY_COUNT;
+  if (!/^\d+$/.test(raw)) {
+    note(`⚠ ${ENV_RETRY_COUNT} must be an integer from 0 to ${RETRY_COUNT_MAX}; using ${RETRY_COUNT}.`);
+    return RETRY_COUNT;
+  }
+  return Math.min(Number(raw), RETRY_COUNT_MAX);
 }
 
 interface CallClaudeOptions {
@@ -76,8 +97,9 @@ export async function callClaude(options: CallClaudeOptions): Promise<string> {
   const { system, messages, tools, stream = false, onToken } = options;
   const maxTokens = resolveMaxTokens(options.maxTokens);
   const provider = getProvider();
+  const retryCount = resolveRetryCount();
 
-  for (let attempt = 0; attempt <= RETRY_COUNT; attempt++) {
+  for (let attempt = 0; attempt <= retryCount; attempt++) {
     try {
       if (stream) {
         return await provider.stream(system, messages, maxTokens, onToken);
@@ -89,11 +111,11 @@ export async function callClaude(options: CallClaudeOptions): Promise<string> {
 
       return await provider.complete(system, messages, maxTokens);
     } catch (error) {
-      if (attempt === RETRY_COUNT || isNonRetriable(error)) throw error;
+      if (attempt === retryCount || isNonRetriable(error)) throw error;
 
       const delayMs = computeBackoffMs(attempt);
       const errMsg = error instanceof Error ? error.message : String(error);
-      note(`⚠ API call failed (attempt ${attempt + 1}/${RETRY_COUNT + 1}): ${errMsg}`);
+      note(`⚠ API call failed (attempt ${attempt + 1}/${retryCount + 1}): ${errMsg}`);
       note(`  Retrying in ${delayMs / 1000}s...`);
       await sleep(delayMs);
     }
