@@ -288,16 +288,20 @@ See [`docs/guides/sdk.mdx`](docs/guides/sdk.mdx).
 
 Minimum requirement: Node.js 24 or newer.
 
-The default provider is Anthropic:
+The default setup uses the locally authenticated TraeCode CLI with
+`Seed-Evolving`, plus local Ollama with `nomic-embed-text` for embeddings:
 
 ```bash
-export ANTHROPIC_API_KEY=sk-...
+trae-cli login
+ollama pull nomic-embed-text
+llmwiki compile
 ```
 
 Provider selection is environment-driven:
 
 | Provider | Typical setup |
 |---|---|
+| TraeCode CLI (default) | Local TraeCode login; `Seed-Evolving`; local Ollama embeddings |
 | Anthropic | `ANTHROPIC_API_KEY` or `ANTHROPIC_AUTH_TOKEN` |
 | Claude Agent SDK | Local Claude Code login, `LLMWIKI_PROVIDER=claude-agent` |
 | OpenAI Codex CLI | Local Codex login / ChatGPT subscription, `LLMWIKI_PROVIDER=codex-agent`; explicit embedding provider required |

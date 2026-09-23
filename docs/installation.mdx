@@ -54,10 +54,26 @@ llmwiki --help
 llmwiki calls an LLM during the compile and query phases. It does **not** require credentials for `ingest`, `view`, `lint`, `status`, or any other read-only operation. Configure your provider by setting the environment variables below - or place them in a `.env` file in your project directory and llmwiki will load them automatically.
 
 <Tabs>
-  <Tab title="Anthropic (default)">
-    Anthropic is the default provider - no `LLMWIKI_PROVIDER` variable is needed. Set either `ANTHROPIC_API_KEY` or `ANTHROPIC_AUTH_TOKEN`; one is sufficient.
+  <Tab title="TraeCode CLI (default)">
+    TraeCode CLI is the default provider. Authenticate it once; llmwiki then
+    uses `Seed-Evolving` for generation and local Ollama with
+    `nomic-embed-text` for embeddings.
 
     ```bash
+    trae-cli login
+    ollama pull nomic-embed-text
+    llmwiki compile
+    ```
+
+    `LLMWIKI_MODEL` and `LLMWIKI_EMBEDDING_PROVIDER` remain available as
+    overrides, but neither is required for this default setup.
+  </Tab>
+
+  <Tab title="Anthropic">
+    Select Anthropic explicitly and set either `ANTHROPIC_API_KEY` or `ANTHROPIC_AUTH_TOKEN`; one is sufficient.
+
+    ```bash
+    export LLMWIKI_PROVIDER=anthropic
     export ANTHROPIC_API_KEY=sk-ant-...
     # or, for Anthropic-compatible gateways that expect a different header:
     export ANTHROPIC_AUTH_TOKEN=<token>
@@ -70,7 +86,9 @@ llmwiki calls an LLM during the compile and query phases. It does **not** requir
     export ANTHROPIC_BASE_URL=https://proxy.example.com
     ```
 
-    **Zero-export shortcut.** If you already have Claude Code configured, llmwiki falls back to reading `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL`, and `ANTHROPIC_MODEL` from `~/.claude/settings.json` (the `env` block). If those values are present there, you can run `llmwiki compile` with no exports at all.
+    If you already have Claude Code configured, llmwiki can read
+    `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL`, and
+    `ANTHROPIC_MODEL` from `~/.claude/settings.json` after Anthropic is selected.
 
     **Configuration precedence:**
     1. Shell environment / local `.env`

@@ -28,21 +28,20 @@ This quickstart walks you through installing llmwiki, setting your API key, and 
     ```
   </Step>
 
-  <Step title="Set your API key">
-    llmwiki defaults to Anthropic. Export your API key before running any command that calls the LLM (ingest is credential-free; compile is not):
+  <Step title="Log in to TraeCode CLI">
+    llmwiki defaults to the locally installed TraeCode CLI with the `Seed-Evolving` model. Log in once; no API key is needed for chat:
 
     ```bash
-    export ANTHROPIC_API_KEY=sk-ant-...
+    trae-cli login
     ```
 
-    If your Anthropic-compatible gateway expects a different header, use `ANTHROPIC_AUTH_TOKEN` instead - either variable satisfies Anthropic authentication. You only need one.
+    Embeddings default to local Ollama with `nomic-embed-text`, so make sure Ollama is running and the model has been pulled:
 
     ```bash
-    # Alternative: use ANTHROPIC_AUTH_TOKEN
-    export ANTHROPIC_AUTH_TOKEN=<token>
+    ollama pull nomic-embed-text
     ```
 
-    **Already using another provider?** llmwiki supports OpenAI-compatible servers, Ollama, GitHub Copilot, and the Claude Agent SDK (which authenticates through your local Claude Code login with no separate API key). See [Provider Setup](/installation#provider-setup) or the full [Provider Configuration](/configuration/providers) reference to configure those instead.
+    **Using another provider?** llmwiki also supports Anthropic, OpenAI-compatible servers, Ollama, GitHub Copilot, and other local agents. See [Provider Setup](/installation#provider-setup) or the full [Provider Configuration](/configuration/providers) reference.
   </Step>
 
   <Step title="Run llmwiki quickstart">

@@ -114,6 +114,7 @@ describe("rules CLI integration", () => {
     try {
       await writeFile(path.join(cwd, "sources", "guide.md"), "Always run tests.\nNo exceptions.\n", "utf-8");
       const result = await runCLI(["rules", "extract"], cwd, {
+        LLMWIKI_PROVIDER: "anthropic",
         ANTHROPIC_API_KEY: "",
         ANTHROPIC_AUTH_TOKEN: "",
       });

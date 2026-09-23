@@ -142,6 +142,7 @@ describe("review integration tests", () => {
     const cwd = await makeTempWorkspace("compile-review-no-key");
     try {
       const result = await runCLI(["compile", "--review"], cwd, {
+        LLMWIKI_PROVIDER: "anthropic",
         ANTHROPIC_API_KEY: "",
         ANTHROPIC_AUTH_TOKEN: "",
       });

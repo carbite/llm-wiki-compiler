@@ -42,19 +42,19 @@ describe("codex-agent environment-file isolation", () => {
     await expect(access(logPath)).rejects.toThrow();
   });
 
-  it("retains project .env loading when codex-agent is not explicitly selected", async () => {
+  it("retains project .env loading when a non-agent provider is selected", async () => {
     const cwd = await aimock.makeWorkspace("# Source\n");
     const logPath = path.join(cwd, "dotenv-reads.log");
     await writeFile(path.join(cwd, ".env"), "LLMWIKI_VERBOSE=1\n", "utf8");
     const result = await runCLI(["--version"], cwd, {
       ...trackedEnv(logPath),
-      LLMWIKI_PROVIDER: "",
+      LLMWIKI_PROVIDER: "openai",
     });
     expectCLIExit(result, 0);
     expect(await readFile(logPath, "utf8")).toContain(path.join(cwd, ".env"));
   });
 
-  it("retains DOTENV_CONFIG_PATH when codex-agent is not explicitly selected", async () => {
+  it("retains DOTENV_CONFIG_PATH when a non-agent provider is selected", async () => {
     const cwd = await aimock.makeWorkspace("# Source\n");
     const logPath = path.join(cwd, "dotenv-reads.log");
     const configuredPath = path.join(cwd, "operator.env");
@@ -63,7 +63,7 @@ describe("codex-agent environment-file isolation", () => {
       ...trackedEnv(logPath),
       DOTENV_CONFIG_PATH: configuredPath,
       LLMWIKI_TEST_DOTENV_TARGET: configuredPath,
-      LLMWIKI_PROVIDER: "",
+      LLMWIKI_PROVIDER: "openai",
     });
     expectCLIExit(result, 0);
     expect(await readFile(logPath, "utf8")).toContain(configuredPath);

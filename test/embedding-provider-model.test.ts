@@ -25,6 +25,11 @@ const { setEnv, restore } = createEnvSnapshot([
 afterEach(restore);
 
 describe("resolveEmbeddingModel — override unset (must match today exactly)", () => {
+  it("uses nomic-embed-text for the built-in Trae and Ollama defaults", () => {
+    setEnv({ LLMWIKI_PROVIDER: undefined, LLMWIKI_EMBEDDING_PROVIDER: undefined });
+    expect(resolveEmbeddingModel()).toBe(EMBEDDING_MODELS.ollama);
+  });
+
   it("honours LLMWIKI_EMBEDDING_MODEL for openai", () => {
     setEnv({ LLMWIKI_PROVIDER: "openai", LLMWIKI_EMBEDDING_MODEL: "custom-embed" });
     expect(resolveEmbeddingModel()).toBe("custom-embed");

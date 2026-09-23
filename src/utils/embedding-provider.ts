@@ -8,10 +8,9 @@
  * LLMWIKI_EMBEDDING_PROVIDER splits them — e.g. Claude Agent for text and a
  * local vLLM instance over its OpenAI-compatible endpoint for embeddings.
  *
- * With the variable unset this module is a pass-through to `getProvider()`:
- * same object, same credentials handling, no store rebuild. Every rule below
- * applies ONLY to the explicit opt-in path, which is what keeps the default
- * path byte-for-byte unchanged.
+ * With the variable unset this module normally passes through to `getProvider()`.
+ * The built-in Trae setup is the exception: Trae cannot embed, so it uses local
+ * Ollama by default while still allowing an explicit override.
  *
  * Misconfiguration is reported by {@link findEmbeddingProviderProblem}, which
  * `ensureProviderAvailable` (the provider guard) calls at every entry point
@@ -23,6 +22,7 @@
 
 import type { LLMProvider } from "./provider.js";
 import { buildProvider, getActiveProviderName, getProvider } from "./provider.js";
+import { TraeAgentProvider } from "../providers/trae-agent.js";
 
 /**
  * Providers with embeddings wired up in llmwiki. Other providers override
@@ -37,6 +37,11 @@ const EMBEDDING_CAPABLE_PROVIDERS: ReadonlySet<string> = new Set([
   "orcarouter",
   "ollama",
 ]);
+
+/** Built-in embedding backends for chat providers that cannot embed. */
+const DEFAULT_EMBEDDING_PROVIDERS: Readonly<Record<string, string>> = {
+  trae: "ollama",
+};
 
 /**
  * Env vars that satisfy each embedding provider's credential, and the variable
@@ -136,8 +141,8 @@ export function isEmbeddingProviderExplicit(): boolean {
 
 /**
  * The provider name serving embeddings: the explicit override when set,
- * otherwise the active chat provider — which is what makes the default path
- * indistinguishable from today's behaviour.
+ * otherwise the active chat provider or that provider's built-in embedding
+ * backend (Trae uses local Ollama).
  *
  * VALIDATES the explicit name, because callers use the result to index
  * per-provider tables. `getActiveProviderName` validates its own value the same
@@ -147,7 +152,10 @@ export function isEmbeddingProviderExplicit(): boolean {
  */
 export function getActiveEmbeddingProviderName(): string {
   const explicit = explicitEmbeddingProviderName();
-  if (explicit === undefined) return getActiveProviderName();
+  if (explicit === undefined) {
+    const chatProvider = getActiveProviderName();
+    return DEFAULT_EMBEDDING_PROVIDERS[chatProvider] ?? chatProvider;
+  }
   const problem = capabilityProblem(explicit);
   if (problem) throw new Error(problem.message);
   return explicit;
@@ -179,7 +187,9 @@ export function resolveEmbeddingEndpoint(providerName: string): string {
  */
 export function hasEmbeddingConfigurationOverride(): boolean {
   if (isEmbeddingProviderExplicit()) return true;
-  return resolveEmbeddingEndpoint(getActiveEmbeddingProviderName()) !== "";
+  const embeddingProvider = getActiveEmbeddingProviderName();
+  if (embeddingProvider !== getActiveProviderName()) return true;
+  return resolveEmbeddingEndpoint(embeddingProvider) !== "";
 }
 
 /** Describe an embedding-incapable provider name, or null when it can serve. */
@@ -239,15 +249,26 @@ export function findEmbeddingProviderProblem(): EmbeddingProviderProblem | null 
 }
 
 /**
- * The provider serving embeddings. Returns `getProvider()` unchanged when
- * LLMWIKI_EMBEDDING_PROVIDER is unset, so the default path keeps today's
- * behaviour exactly, including its soft handling of a missing embedding key.
+ * The provider serving embeddings. Returns `getProvider()` unchanged when no
+ * override or built-in split applies; Trae's built-in split returns Ollama.
  *
  * Still validates rather than trusting the guard to have run: this is reachable
  * from the SDK and from tests without going through a CLI entry point.
  */
 export function getEmbeddingProvider(): LLMProvider {
-  if (!isEmbeddingProviderExplicit()) return getProvider();
+  if (!isEmbeddingProviderExplicit()) {
+    const embeddingProvider = getActiveEmbeddingProviderName();
+    const chatProvider = getProvider();
+    if (embeddingProvider === getActiveProviderName()) return chatProvider;
+
+    // Apply the built-in split only to the real Trae provider. Callers and
+    // tests may replace getProvider() with an injected provider that already
+    // implements embeddings; bypassing that object would violate the existing
+    // provider seam and unexpectedly contact a local Ollama server.
+    return chatProvider instanceof TraeAgentProvider
+      ? buildProvider(embeddingProvider)
+      : chatProvider;
+  }
   const problem = findEmbeddingProviderProblem();
   if (problem) throw new Error(problem.message);
   // buildProvider also resolves a chat model (LLMWIKI_MODEL) onto the returned

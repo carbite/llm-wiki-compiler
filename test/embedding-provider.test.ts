@@ -14,6 +14,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import {
   getEmbeddingProvider,
   getActiveEmbeddingProviderName,
+  hasEmbeddingConfigurationOverride,
   isEmbeddingProviderExplicit,
 } from "../src/utils/embedding-provider.js";
 import { getProvider } from "../src/utils/provider.js";
@@ -36,11 +37,20 @@ const { setEnv, restore } = createEnvSnapshot([
 afterEach(restore);
 
 describe("getEmbeddingProvider — default path is unchanged", () => {
+  it("uses local Ollama for the built-in Trae configuration", () => {
+    setEnv({ LLMWIKI_PROVIDER: undefined, LLMWIKI_EMBEDDING_PROVIDER: undefined });
+    expect(getEmbeddingProvider()).toBeInstanceOf(OllamaProvider);
+    expect(getActiveEmbeddingProviderName()).toBe("ollama");
+    expect(isEmbeddingProviderExplicit()).toBe(false);
+    expect(hasEmbeddingConfigurationOverride()).toBe(true);
+  });
+
   it("returns the chat provider's type when the override is unset", () => {
     setEnv({ LLMWIKI_PROVIDER: "openai", OPENAI_API_KEY: "k" });
     expect(getEmbeddingProvider()).toBeInstanceOf(getProvider().constructor as never);
     expect(isEmbeddingProviderExplicit()).toBe(false);
     expect(getActiveEmbeddingProviderName()).toBe("openai");
+    expect(hasEmbeddingConfigurationOverride()).toBe(false);
   });
 
   it("does not require VOYAGE_API_KEY on the default anthropic path", () => {

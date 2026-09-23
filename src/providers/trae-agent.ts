@@ -6,8 +6,8 @@
  * contract as Codex (read-only, ephemeral, stdin prompt, `--output-last-message`,
  * optional `--output-schema`), so llmwiki drives it identically and never opens
  * its credential files or forwards API-key environment variables. Authentication
- * is the CLI's own locally managed login (`trae-cli login`); the default model is
- * chosen by the CLI unless `LLMWIKI_MODEL` names one (e.g. `Seed-Evolving`).
+ * is the CLI's own locally managed login (`trae-cli login`). llmwiki defaults to
+ * `Seed-Evolving`; `LLMWIKI_MODEL` can override it.
  */
 
 import { CliAgentProvider, type CliAgentConfig, type CliAgentProviderOptions } from "./cli-agent.js";

@@ -7,6 +7,7 @@
  */
 
 import { createRequire } from "node:module";
+import { DEFAULT_PROVIDER } from "../utils/constants.js";
 
 /** Agent-CLI providers whose selection suppresses project `.env` loading. */
 const AGENT_PROVIDERS = new Set(["codex-agent", "trae"]);
@@ -39,7 +40,7 @@ export function loadCliEnvironment(
   argv: string[] = process.argv,
   env: NodeJS.ProcessEnv = process.env,
 ): void {
-  const selectedProvider = providerFlag(argv) ?? env.LLMWIKI_PROVIDER?.trim();
-  if (selectedProvider && AGENT_PROVIDERS.has(selectedProvider)) return;
+  const selectedProvider = providerFlag(argv) ?? normalizedProvider(env.LLMWIKI_PROVIDER) ?? DEFAULT_PROVIDER;
+  if (AGENT_PROVIDERS.has(selectedProvider)) return;
   require("dotenv/config");
 }

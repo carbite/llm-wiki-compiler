@@ -6,6 +6,7 @@ const HOOK_TIMEOUT_MS = 60_000;
 export default defineConfig({
   test: {
     globals: true,
+    setupFiles: ["./test/setup-provider.ts"],
     testTimeout: TEST_TIMEOUT_MS,
     hookTimeout: HOOK_TIMEOUT_MS,
     // Many integration tests spawn a CLI subprocess. With one worker per core

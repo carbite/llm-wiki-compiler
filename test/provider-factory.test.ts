@@ -44,6 +44,7 @@ function setClaudeAnthropicModelFallback(model: string): void {
 }
 
 function expectAnthropicModel(expectedModel: string): void {
+  process.env.LLMWIKI_PROVIDER = "anthropic";
   const provider = getProvider();
   expect(provider).toBeInstanceOf(AnthropicProvider);
   expect(Reflect.get(provider, "model")).toBe(expectedModel);
@@ -80,32 +81,37 @@ describe("getProvider", () => {
   });
 
   it("defaults to official anthropic endpoint when base url is unset", () => {
+    process.env.LLMWIKI_PROVIDER = "anthropic";
     delete process.env.ANTHROPIC_BASE_URL;
     const provider = getProvider();
     expect(provider).toBeInstanceOf(AnthropicProvider);
   });
 
   it("uses configured anthropic base url", () => {
+    process.env.LLMWIKI_PROVIDER = "anthropic";
     process.env.ANTHROPIC_BASE_URL = "https://custom.anthropic.com";
     const provider = getProvider();
     expect(provider).toBeInstanceOf(AnthropicProvider);
   });
 
   it("rejects invalid anthropic base url", () => {
+    process.env.LLMWIKI_PROVIDER = "anthropic";
     process.env.ANTHROPIC_BASE_URL = "not-a-url";
     expect(() => getProvider()).toThrow('Invalid ANTHROPIC_BASE_URL: "not-a-url"');
   });
 
   it("accepts anthropic base url with path endpoint", () => {
+    process.env.LLMWIKI_PROVIDER = "anthropic";
     process.env.ANTHROPIC_BASE_URL = "https://api.anthropic.com/v1";
     const provider = getProvider();
     expect(provider).toBeInstanceOf(AnthropicProvider);
   });
 
-  it("returns AnthropicProvider when LLMWIKI_PROVIDER is unset", () => {
+  it("returns TraeAgentProvider with Seed-Evolving when LLMWIKI_PROVIDER is unset", () => {
     delete process.env.LLMWIKI_PROVIDER;
     const provider = getProvider();
-    expect(provider).toBeInstanceOf(AnthropicProvider);
+    expect(provider).toBeInstanceOf(TraeAgentProvider);
+    expect(Reflect.get(provider, "model")).toBe("Seed-Evolving");
   });
 
   it("returns AnthropicProvider when LLMWIKI_PROVIDER=anthropic", () => {
@@ -201,7 +207,7 @@ describe("getProvider", () => {
     expect(getProvider()).toBeInstanceOf(TraeAgentProvider);
   });
 
-  it("delegates the trae model to the CLI when LLMWIKI_MODEL is unset", () => {
+  it("uses Seed-Evolving for trae when LLMWIKI_MODEL is unset", () => {
     process.env.LLMWIKI_PROVIDER = "trae";
     delete process.env.LLMWIKI_MODEL;
     expect(resolveActiveModelId()).toBe(PROVIDER_MODELS.trae);
@@ -279,12 +285,14 @@ describe("getProvider", () => {
   });
 
   it("treats whitespace-only ANTHROPIC_BASE_URL as unset", () => {
+    process.env.LLMWIKI_PROVIDER = "anthropic";
     process.env.ANTHROPIC_BASE_URL = "  ";
     const provider = getProvider();
     expect(provider).toBeInstanceOf(AnthropicProvider);
   });
 
   it("uses Claude settings fallback for anthropic base URL", () => {
+    process.env.LLMWIKI_PROVIDER = "anthropic";
     process.env[TEST_SETTINGS_PATH_ENV] = withClaudeSettings({
       env: { ANTHROPIC_BASE_URL: "https://api.kimi.com/coding/" },
     });
@@ -319,6 +327,7 @@ describe("getProvider", () => {
     const settingsPath = withMalformedClaudeSettings("llmwiki-provider-factory-malformed-");
 
     process.env[TEST_SETTINGS_PATH_ENV] = settingsPath;
+    process.env.LLMWIKI_PROVIDER = "anthropic";
     delete process.env.ANTHROPIC_BASE_URL;
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.ANTHROPIC_AUTH_TOKEN;
@@ -331,6 +340,7 @@ describe("getProvider", () => {
     const settingsPath = withMalformedClaudeSettings("llmwiki-provider-factory-malformed-optional-");
 
     process.env[TEST_SETTINGS_PATH_ENV] = settingsPath;
+    process.env.LLMWIKI_PROVIDER = "anthropic";
     process.env.ANTHROPIC_AUTH_TOKEN = "explicit-token";
     delete process.env.ANTHROPIC_BASE_URL;
     delete process.env.LLMWIKI_MODEL;

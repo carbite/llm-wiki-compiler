@@ -8,7 +8,7 @@ llmwiki is provider-portable. Whether you have an Anthropic API key, a GitHub Co
 
 ## Configuration precedence
 
-When you use the Anthropic provider (the default), llmwiki resolves credentials in this order:
+When you select the Anthropic provider, llmwiki resolves credentials in this order:
 
 1. Shell environment variables or a `.env` file in your project directory
 2. Claude Code settings fallback - `~/.claude/settings.json` → `env` block
@@ -19,9 +19,9 @@ This means that if you already have Claude Code configured on your machine, you 
 ## Providers
 
 <Tabs>
-  <Tab title="Anthropic (Default)">
+  <Tab title="Anthropic">
 
-The Anthropic provider uses the official `@anthropic-ai/sdk` to call Claude directly. It is the default when `LLMWIKI_PROVIDER` is unset.
+The Anthropic provider uses the official `@anthropic-ai/sdk` to call Claude directly. Select it with `LLMWIKI_PROVIDER=anthropic`.
 
 **Authentication**
 
@@ -186,16 +186,16 @@ or log an API key for chat.
 
 ```bash
 trae-cli login
-
-export LLMWIKI_PROVIDER=trae
-export LLMWIKI_MODEL=Seed-Evolving
-export LLMWIKI_EMBEDDING_PROVIDER=ollama
-export OLLAMA_HOST=http://localhost:11434/v1
 llmwiki compile
 
-# Equivalent one-run selection:
-llmwiki compile --provider trae
+# Optional overrides:
+LLMWIKI_MODEL=another-model llmwiki compile
+llmwiki compile --provider anthropic
 ```
+
+Trae is the built-in default provider. llmwiki passes `Seed-Evolving` to
+`trae-cli exec --model` and uses local Ollama with `nomic-embed-text` for
+embeddings unless you override those settings.
 
 The `--provider` override is available on `compile`, `refresh`, `query`,
 `watch`, `rules extract`, `eval`, and `quickstart`. If TraeCode CLI is missing or
@@ -207,21 +207,18 @@ versions may not support the secure non-interactive flags this provider
 requires. Verify with `trae-cli --version`.
 
 <Warning>
-  Like `codex-agent`, when `trae` is selected by `--provider` or a
-  shell-exported `LLMWIKI_PROVIDER`, llmwiki deliberately does not open the
-  project `.env` file because it may contain API keys. Export
-  `LLMWIKI_EMBEDDING_PROVIDER`, `LLMWIKI_MODEL`, and any embedding-backend
-  settings in the shell for that run.
+  When `trae` is selected, including by default, llmwiki deliberately does not
+  open the project `.env` file because it may contain API keys. Export any
+  provider or model overrides in the shell for that run.
 </Warning>
 
 The execution model, option semantics, and fail-closed embeddings behavior are
 identical to the OpenAI Codex CLI provider above: ephemeral read-only `exec`
-child in a throwaway directory, bounded timeout and output caps, `LLMWIKI_MODEL`
-passed to `--model` (Seed-Evolving in the example), no `maxTokens` control, and
-`--output-schema`-validated structured output. Because TraeCode CLI has no
-embeddings interface, `trae` requires an explicit `LLMWIKI_EMBEDDING_PROVIDER`
-(use `ollama` for a fully keyless setup) and never silently degrades to
-lexical-only retrieval.
+child in a throwaway directory, bounded timeout and output caps, the resolved
+model passed to `--model`, no `maxTokens` control, and `--output-schema`-validated
+structured output. Because TraeCode CLI has no embeddings interface, llmwiki
+routes Trae embeddings to local Ollama by default. An explicit
+`LLMWIKI_EMBEDDING_PROVIDER` still overrides that backend.
 
   </Tab>
   <Tab title="OpenAI-Compatible">

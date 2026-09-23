@@ -1,8 +1,8 @@
 /**
  * Preservation witnesses for adding the opt-in Codex provider.
  *
- * These pin the old default and an existing explicit provider while also
- * proving that only the new provider receives stricter embedding treatment.
+ * These pin existing explicit providers while also proving that only the
+ * providers without a built-in embedding backend receive stricter treatment.
  */
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -13,6 +13,7 @@ import { CopilotProvider } from "../src/providers/copilot.js";
 import { MiniMaxProvider } from "../src/providers/minimax.js";
 import { OpenAIProvider } from "../src/providers/openai.js";
 import { OllamaProvider } from "../src/providers/ollama.js";
+import { TraeAgentProvider } from "../src/providers/trae-agent.js";
 import { getEmbeddingProvider } from "../src/utils/embedding-provider.js";
 import { ensureProviderAvailable } from "../src/utils/provider-guard.js";
 import { getProvider } from "../src/utils/provider.js";
@@ -20,10 +21,10 @@ import { getProvider } from "../src/utils/provider.js";
 const originalEnv = { ...process.env };
 afterEach(() => { process.env = { ...originalEnv }; });
 
-describe("codex-agent opt-in preservation", () => {
-  it("keeps Anthropic as the default provider", () => {
+describe("agent-provider preservation", () => {
+  it("uses Trae as the default provider", () => {
     delete process.env.LLMWIKI_PROVIDER;
-    expect(getProvider()).toBeInstanceOf(AnthropicProvider);
+    expect(getProvider()).toBeInstanceOf(TraeAgentProvider);
   });
 
   it("keeps the existing OpenAI selection and key guard unchanged", () => {

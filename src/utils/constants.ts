@@ -67,7 +67,7 @@ export const RETRY_MULTIPLIER = 4;
 export const RETRY_MAX_DELAY_MS = 30_000;
 
 /** Default provider when LLMWIKI_PROVIDER is not set. */
-export const DEFAULT_PROVIDER = "anthropic";
+export const DEFAULT_PROVIDER = "trae";
 
 /** Provider names accepted by LLMWIKI_PROVIDER, including aliases. */
 export const SUPPORTED_PROVIDER_INPUTS = [
@@ -98,9 +98,7 @@ export const PROVIDER_MODELS: Record<string, string> = {
   anthropic: "claude-sonnet-4-6",
   "claude-agent": "claude-sonnet-4-6",
   "codex-agent": "codex-cli-default",
-  // TraeCode CLI picks its own available default when unset; llmwiki leaves the
-  // choice to the CLI rather than pinning a model that may rotate.
-  trae: "trae-cli-default",
+  trae: "Seed-Evolving",
   openai: "gpt-4o",
   ollama: "llama3.1",
   minimax: "MiniMax-M2.7",

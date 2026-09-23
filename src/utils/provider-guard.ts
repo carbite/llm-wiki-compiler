@@ -26,6 +26,7 @@ import {
 import { resolveAnthropicAuthFromEnv } from "./claude-settings.js";
 import {
   findEmbeddingProviderProblem,
+  getActiveEmbeddingProviderName,
   isEmbeddingProviderExplicit,
 } from "./embedding-provider.js";
 import { embeddingsDisabled } from "./embeddings-config.js";
@@ -117,7 +118,12 @@ function ensureRequiredProvidersAvailable(requireEmbeddings: boolean): void {
   if (requireEmbeddings) ensureEmbeddingProviderAvailable();
   const provider = normalizeProviderName(process.env.LLMWIKI_PROVIDER ?? DEFAULT_PROVIDER);
 
-  if (requireEmbeddings && NON_EMBEDDING_AGENT_PROVIDERS.has(provider) && !isEmbeddingProviderExplicit()) {
+  if (
+    requireEmbeddings &&
+    NON_EMBEDDING_AGENT_PROVIDERS.has(provider) &&
+    !isEmbeddingProviderExplicit() &&
+    getActiveEmbeddingProviderName() === provider
+  ) {
     throw new ProviderUnavailableError(
       provider,
       ["LLMWIKI_EMBEDDING_PROVIDER"],

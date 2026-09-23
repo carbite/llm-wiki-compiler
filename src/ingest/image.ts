@@ -14,9 +14,8 @@ import { readFile } from "fs/promises";
 import path from "path";
 import Anthropic from "@anthropic-ai/sdk";
 import { buildAnthropicClientOptions } from "../providers/anthropic.js";
-import { IMAGE_DESCRIBE_MAX_TOKENS } from "../utils/constants.js";
+import { DEFAULT_PROVIDER, IMAGE_DESCRIBE_MAX_TOKENS, PROVIDER_MODELS } from "../utils/constants.js";
 import { resolveAnthropicAuthFromEnv, resolveAnthropicBaseURLFromEnv, resolveAnthropicModelFromEnv } from "../utils/claude-settings.js";
-import { PROVIDER_MODELS } from "../utils/constants.js";
 import { titleFromFilename, type IngestedSource } from "./shared.js";
 
 /** Mime types supported by Anthropic vision. */
@@ -90,7 +89,7 @@ async function describeImageWithVision(
  * @throws When the provider does not support vision or on read/API failure.
  */
 export default async function ingestImage(filePath: string): Promise<IngestedSource> {
-  const providerName = process.env.LLMWIKI_PROVIDER ?? "anthropic";
+  const providerName = process.env.LLMWIKI_PROVIDER ?? DEFAULT_PROVIDER;
 
   if (providerName !== "anthropic") {
     throw new Error(

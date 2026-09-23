@@ -79,6 +79,11 @@ describe("ensureProviderAvailable — embedding provider override", () => {
 });
 
 describe("ensureProviderAvailable — the default path stays soft", () => {
+  it("accepts the built-in Trae chat and local Ollama embedding defaults", () => {
+    setEnv({ LLMWIKI_PROVIDER: undefined, LLMWIKI_EMBEDDING_PROVIDER: undefined });
+    expect(() => ensureProviderAvailable()).not.toThrow();
+  });
+
   it("does not require an embedding credential when the override is unset", () => {
     // Anthropic embeddings go to Voyage; a missing VOYAGE_API_KEY degrades to
     // lexical ranking and is documented as doing so. Promoting that to a hard

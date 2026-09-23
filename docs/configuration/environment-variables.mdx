@@ -14,10 +14,10 @@ You don't need to set everything - only the variables relevant to your chosen pr
 
 | Variable | Default | Description |
 |---|---|---|
-| `LLMWIKI_PROVIDER` | `anthropic` | Provider to use. One of: `anthropic`, `openai`, `ollama`, `minimax`, `copilot`, `claude-agent`, `codex-agent`, `trae`, `orcarouter`, `atlascloud` (aliases: `atlas-cloud`, `atlas`) |
-| `LLMWIKI_MODEL` | Provider default | Model name to use. Overrides the provider's built-in default model. For `codex-agent` and `trae`, unset delegates model choice to the CLI and a set value is passed through with `--model` |
+| `LLMWIKI_PROVIDER` | `trae` | Provider to use. One of: `anthropic`, `openai`, `ollama`, `minimax`, `copilot`, `claude-agent`, `codex-agent`, `trae`, `orcarouter`, `atlascloud` (aliases: `atlas-cloud`, `atlas`) |
+| `LLMWIKI_MODEL` | Provider default | Model name to use. Overrides the provider's built-in default. Trae defaults to `Seed-Evolving`; Codex delegates to the CLI when unset. A set value is passed through with `--model` |
 | `LLMWIKI_EMBEDDINGS` | Enabled | Set to `off`, `false`, `0`, or `no` (case-insensitive) to skip all embedding refreshes, including compile, review approval, import, and `query --save`. Existing embedding and pending files are left untouched. |
-| `LLMWIKI_EMBEDDING_PROVIDER` | Active chat provider | Backend serving embeddings, independent of `LLMWIKI_PROVIDER`. One of `anthropic`, `claude-agent`, `openai`, `ollama`, `orcarouter` |
+| `LLMWIKI_EMBEDDING_PROVIDER` | Active chat provider; `ollama` for Trae | Backend serving embeddings, independent of `LLMWIKI_PROVIDER`. One of `anthropic`, `claude-agent`, `openai`, `ollama`, `orcarouter` |
 | `LLMWIKI_EMBEDDING_MODEL` | Provider default | Embedding model to use. Applies when the effective embedding provider is `openai`, `ollama` or `orcarouter` - ignored for `anthropic` and `claude-agent`, even when `LLMWIKI_EMBEDDING_PROVIDER` names one of them explicitly |
 
 `LLMWIKI_EMBEDDINGS` controls embedding writes, not retrieval. While it is
@@ -44,11 +44,10 @@ not require one when `LLMWIKI_EMBEDDINGS` disables refreshes. The keyless
 combination with embeddings enabled is `codex-agent` chat plus `ollama`
 embeddings.
 
-When `codex-agent` is selected explicitly through `--provider` or a
-shell-exported `LLMWIKI_PROVIDER`, llmwiki does not open the project `.env`
-file, because that file may contain API keys. Export the Codex model, embedding
-provider, and embedding-backend settings in the shell for that run. Other
-providers retain the existing shell-over-`.env` precedence.
+When an agent provider (`trae` or `codex-agent`) is selected, llmwiki does not
+open the project `.env` file because that file may contain API keys. Export any
+overrides in the shell for that run. Other providers retain the existing
+shell-over-`.env` precedence.
 
 <Warning>
   If you point `OPENAI_EMBEDDINGS_BASE_URL` at a host you do not operate, set `OPENAI_EMBEDDINGS_API_KEY` as well. Without it the embeddings client reuses `OPENAI_API_KEY`, which sends your cloud OpenAI key to that host. llmwiki warns when this happens, except for endpoints on `localhost`.
@@ -134,17 +133,17 @@ update with `npm install -g @openai/codex@latest`.
 
 | Variable | Required | Description |
 |---|---|---|
-| `LLMWIKI_PROVIDER` | Yes | Set to `trae` |
-| `LLMWIKI_MODEL` | No | Passed to `trae-cli exec --model`; when unset, TraeCode CLI chooses its own available default. Example: `Seed-Evolving` |
-| `LLMWIKI_EMBEDDING_PROVIDER` | Yes | Existing provider that serves embeddings; use `ollama` for a keyless setup |
+| `LLMWIKI_PROVIDER` | No | Defaults to `trae`; set only to select a different provider |
+| `LLMWIKI_MODEL` | No | Passed to `trae-cli exec --model`; defaults to `Seed-Evolving` |
+| `LLMWIKI_EMBEDDING_PROVIDER` | No | Defaults to local `ollama`; override to use another embedding backend |
 
 TraeCode CLI exposes the same non-interactive `exec` contract as Codex, so
 llmwiki drives it through the identical read-only, ephemeral, stdin-prompt
 boundary. Authentication is managed only by the installed TraeCode CLI
 (`trae-cli login`); llmwiki does not read its auth files or any API key for chat.
-Like Codex, the CLI exposes no embeddings API and no `maxTokens` control, so
-`LLMWIKI_EMBEDDING_PROVIDER` must name a real embedding backend and that internal
-hint is not honored. Each request has a fixed 10-minute timeout and 1 MiB
+Like Codex, the CLI exposes no embeddings API and no `maxTokens` control. llmwiki
+therefore uses local Ollama for Trae embeddings by default; its default embedding
+model is `nomic-embed-text`. Each request has a fixed 10-minute timeout and 1 MiB
 process/final-output caps.
 
 The minimum verified compatible TraeCode CLI version is **0.201.4**. If an older

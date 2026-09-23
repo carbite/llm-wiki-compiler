@@ -24,15 +24,26 @@ If you're on an older Node release, pin to `llm-wiki-compiler@<0.5.0` until you 
 <Accordion title="I get 'ProviderUnavailableError' when running compile. What does this mean?">
 `ProviderUnavailableError` means llmwiki could not find valid LLM credentials for the active provider. No compilation calls were made and nothing was written.
 
-The most common cause is a missing or misconfigured API key. For the default Anthropic provider, set one of:
+The default provider is TraeCode CLI. Confirm that it is installed and logged in:
 
 ```bash
+trae-cli --version
+trae-cli login
+```
+
+Trae embeddings default to local Ollama, so also confirm that Ollama is running
+and `nomic-embed-text` is installed. If you selected Anthropic explicitly, set
+one of:
+
+```bash
+export LLMWIKI_PROVIDER=anthropic
 export ANTHROPIC_API_KEY=sk-ant-...
 # or, for compatible gateways:
 export ANTHROPIC_AUTH_TOKEN=...
 ```
 
-llmwiki also reads credentials from `~/.claude/settings.json` (the `env` block) as a fallback, so if you already have Claude Code configured locally, a bare `llmwiki compile` should work with no exports at all.
+When Anthropic is selected, llmwiki also reads credentials from
+`~/.claude/settings.json` (the `env` block) as a fallback.
 
 To see all accepted provider environment variables:
 
@@ -44,10 +55,12 @@ If you don't have an Anthropic API key, see the next question for keyless altern
 </Accordion>
 
 <Accordion title="Can I use llmwiki without an Anthropic API key?">
-Yes. llmwiki supports four keyless or non-Anthropic providers:
+Yes. TraeCode CLI is the default and uses its local login. Other keyless or
+non-Anthropic providers are also available:
 
 | Provider | How to activate | Notes |
 |---|---|---|
+| `trae` | Default; or `LLMWIKI_PROVIDER=trae` | Uses the installed TraeCode CLI login and local Ollama embeddings. |
 | `claude-agent` | `LLMWIKI_PROVIDER=claude-agent` | Uses your local Claude Code login (OAuth/subscription). No `ANTHROPIC_API_KEY` needed - if `claude` runs in your terminal, this works. |
 | `codex-agent` | `LLMWIKI_PROVIDER=codex-agent` | Uses the installed Codex CLI and its local ChatGPT login. Requires an explicit existing embedding provider; pair with `ollama` for a keyless setup. |
 | `ollama` | `LLMWIKI_PROVIDER=ollama` | Runs entirely against a local Ollama instance. Set `LLMWIKI_MODEL` and `OLLAMA_HOST`. |

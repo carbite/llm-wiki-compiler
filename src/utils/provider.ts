@@ -98,7 +98,7 @@ export function buildProvider(providerName: string): LLMProvider {
     case "codex-agent":
       return new CodexAgentProvider(readOptionalEnv("LLMWIKI_MODEL"));
     case "trae":
-      return new TraeAgentProvider(readOptionalEnv("LLMWIKI_MODEL"));
+      return new TraeAgentProvider(readOptionalEnv("LLMWIKI_MODEL") ?? PROVIDER_MODELS.trae);
     case "openai":
       return new OpenAIProvider(getModelForProvider("openai"), {
         baseURL: readOptionalEnv("OPENAI_BASE_URL"),
@@ -127,7 +127,7 @@ export function buildProvider(providerName: string): LLMProvider {
 
 /**
  * Factory returning the provider for CHAT and tool calls, from LLMWIKI_PROVIDER
- * (default "anthropic") and LLMWIKI_MODEL. Embedding callers use
+ * (default "trae") and LLMWIKI_MODEL. Embedding callers use
  * `getEmbeddingProvider` from `./embedding-provider.js` instead.
  */
 export function getProvider(): LLMProvider {

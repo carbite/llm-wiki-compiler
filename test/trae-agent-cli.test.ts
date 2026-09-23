@@ -10,7 +10,6 @@
  * embeddings with a trae-named remediation.
  */
 
-import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { useAimockLifecycle } from "./fixtures/aimock-helper.js";
 import type { FakeCodex } from "./fixtures/fake-codex.js";
@@ -59,16 +58,28 @@ describe("trae through the real llmwiki CLI", () => {
     await agent.expectSuccessfulCompile(cwd, fake, "Compiled by the TraeCode CLI provider");
   }, 30_000);
 
-  it("fails before invoking trae-cli when no embedding provider is explicit", async () => {
-    const cwd = await aimock.makeWorkspace("# Source\n\nEmbeddings must be explicit.\n");
-    const fake = await fakeTrae();
-    const result = await runCLI(["compile"], cwd, {
-      PATH: `${fake.binDir}${path.delimiter}${process.env.PATH ?? ""}`,
-      LLMWIKI_PROVIDER: "trae",
-      LLMWIKI_EMBEDDING_PROVIDER: "",
-      OPENAI_API_KEY: "sk-must-not-be-used",
+  it("uses Trae, Seed-Evolving, and Ollama when no provider settings are supplied", async () => {
+    const cwd = await aimock.makeWorkspace("# Source\n\nBuilt-in defaults should compile.\n");
+    const fake = await fakeTrae({
+      toolOutput: extractedConcept(),
+      textOutput: "# Trae Agent Concept\n\nCompiled with built-in defaults.",
     });
-    await agent.expectEmbeddingPreflightFailure(result, fake);
+    const env = traeEnv(fake);
+    // Explicit `undefined` removes the test suite's inherited Anthropic
+    // baseline from the child environment so this exercises product defaults.
+    env.LLMWIKI_PROVIDER = undefined;
+    env.LLMWIKI_MODEL = undefined;
+    env.LLMWIKI_EMBEDDING_PROVIDER = undefined;
+
+    const result = await runCLI(["compile"], cwd, env);
+
+    expectCLIExit(result, 0);
+    await agent.expectSuccessfulCompile(cwd, fake, "Compiled with built-in defaults");
+    const calls = await fake.calls();
+    expect(calls.every((call) => {
+      const modelIndex = call.args.indexOf("--model");
+      return modelIndex >= 0 && call.args[modelIndex + 1] === "Seed-Evolving";
+    })).toBe(true);
   });
 
   it("fails actionably naming TraeCode CLI when the binary is absent", async () => {

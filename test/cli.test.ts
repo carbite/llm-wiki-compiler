@@ -17,7 +17,7 @@ async function runCompileWithoutSources(
   try {
     const { stdout } = await exec("node", [CLI, "compile"], {
       cwd,
-      env: { ...process.env, ...envOverrides },
+      env: { ...process.env, LLMWIKI_PROVIDER: "anthropic", ...envOverrides },
     });
     return stdout;
   } finally {
@@ -69,6 +69,7 @@ describe("CLI smoke tests", () => {
       await exec("node", [CLI, "compile"], {
         env: {
           ...process.env,
+          LLMWIKI_PROVIDER: "anthropic",
           ANTHROPIC_API_KEY: "",
           ANTHROPIC_AUTH_TOKEN: "",
           ANTHROPIC_BASE_URL: "http://localhost:11434",
@@ -101,6 +102,7 @@ describe("CLI smoke tests", () => {
         cwd: workspace.cwd,
         env: {
           ...process.env,
+          LLMWIKI_PROVIDER: "anthropic",
           ANTHROPIC_API_KEY: "",
           ANTHROPIC_AUTH_TOKEN: "",
           LLMWIKI_CLAUDE_SETTINGS_PATH: workspace.settingsPath,
@@ -123,6 +125,7 @@ describe("CLI smoke tests", () => {
         cwd: workspace.cwd,
         env: {
           ...process.env,
+          LLMWIKI_PROVIDER: "anthropic",
           ANTHROPIC_API_KEY: "",
           ANTHROPIC_AUTH_TOKEN: "",
           LLMWIKI_CLAUDE_SETTINGS_PATH: workspace.settingsPath,
